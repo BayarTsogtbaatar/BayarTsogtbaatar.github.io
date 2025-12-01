@@ -1,0 +1,1101 @@
+/* =========================================================
+   PS3 XMB Inspired UI Styles
+   Palette:
+     Dark blue background: #0A1837
+     Teal/blue areas:      #1E6FA8
+     Light blue glow:      #58C7FF
+     White text:           #FFFFFF
+     Subtle menu glow:     rgba(120, 200, 255, 0.3)
+   ========================================================= */
+
+:root {
+  --bg-dark: #0a1837;
+  --bg-teal: #1e6fa8;
+  --glow: #58c7ff;
+  --text: #ffffff;
+  --menu-glow: rgba(120, 200, 255, 0.3);
+
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.08);
+  --border: rgba(88, 199, 255, 0.18);
+  --shadow-strong: 0 12px 44px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 6px 24px rgba(0, 0, 0, 0.28);
+  --easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Global reset and base */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  font-family: "Open Sans", system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
+    Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji",
+    "Segoe UI Emoji";
+  line-height: 1.4;
+  background: linear-gradient(180deg, var(--bg-teal) 0%, #0e2250 40%, var(--bg-dark) 100%);
+  overflow: hidden; /* keep the XMB feel, content uses internal scroll areas */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: rgba(88, 199, 255, 0.25);
+}
+
+:focus-visible {
+  outline: 2px solid rgba(88, 199, 255, 0.7);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/* Subtle text glow like PS3 UI */
+.text-glow,
+body {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45),
+    0 0 8px rgba(88, 199, 255, 0.15);
+}
+
+/* =========================================================
+   Background layers: gradient (body) + waves (SVG) + particles (canvas)
+   ========================================================= */
+
+#background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Particles canvas */
+#particles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.7;
+}
+
+/* Waves SVG */
+#waves {
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  mix-blend-mode: screen;
+}
+
+.wave {
+  transform-origin: center;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  filter: drop-shadow(0 0 15px rgba(88, 199, 255, 0.18));
+}
+
+/* Different speeds and slight vertical drift for parallax feeling */
+.wave-a {
+  animation-name: undulateA;
+  animation-duration: 36s;
+}
+.wave-b {
+  animation-name: undulateB;
+  animation-duration: 48s;
+}
+.wave-c {
+  animation-name: undulateC;
+  animation-duration: 60s;
+}
+
+@keyframes undulateA {
+  0% {
+    transform: translateX(0px) translateY(0px) scale(1.02);
+  }
+  50% {
+    transform: translateX(40px) translateY(4px) scale(1.02);
+  }
+  100% {
+    transform: translateX(0px) translateY(0px) scale(1.02);
+  }
+}
+@keyframes undulateB {
+  0% {
+    transform: translateX(0px) translateY(0px) scale(1.01);
+  }
+  50% {
+    transform: translateX(-60px) translateY(-6px) scale(1.01);
+  }
+  100% {
+    transform: translateX(0px) translateY(0px) scale(1.01);
+  }
+}
+@keyframes undulateC {
+  0% {
+    transform: translateX(0px) translateY(0px) scale(1.03);
+  }
+  50% {
+    transform: translateX(30px) translateY(-3px) scale(1.03);
+  }
+  100% {
+    transform: translateX(0px) translateY(0px) scale(1.03);
+  }
+}
+
+/* =========================================================
+   Top Bar (Header)
+   ========================================================= */
+
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+  z-index: 5;
+  background: linear-gradient(
+    to bottom,
+    rgba(10, 24, 55, 0.45),
+    rgba(10, 24, 55, 0.15)
+  );
+  backdrop-filter: blur(8px) saturate(120%);
+  border-bottom: 1px solid rgba(88, 199, 255, 0.15);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+
+.top-left,
+.top-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft), 0 0 24px var(--menu-glow);
+  transition: background 180ms var(--easing), transform 200ms var(--easing);
+}
+.user-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.header-hint {
+  opacity: 0.85;
+  font-size: 0.9rem;
+}
+
+.icon-btn {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 8px;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 180ms var(--easing), border-color 180ms,
+    filter 180ms, background 180ms;
+}
+.icon-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
+  filter: drop-shadow(0 0 10px rgba(88, 199, 255, 0.5));
+}
+
+.wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft), 0 0 24px var(--menu-glow);
+}
+
+.clock {
+  min-width: 120px;
+  text-align: right;
+  opacity: 0.95;
+}
+
+/* Icon sizes */
+.icon {
+  width: 24px;
+  height: 24px;
+  color: var(--text);
+  stroke: currentColor;
+}
+.icon.sm {
+  width: 18px;
+  height: 18px;
+}
+.icon.md {
+  width: 26px;
+  height: 26px;
+}
+.icon.lg {
+  width: 44px;
+  height: 44px;
+}
+
+/* =========================================================
+   XMB Layout
+   ========================================================= */
+
+.xmb {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  align-items: start;
+  justify-items: center;
+  padding-top: 72px; /* room for header */
+}
+
+/* Horizontal Category Bar */
+.horizontal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(18px, 3.5vw, 42px);
+  margin-top: min(24vh, 240px);
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-strong), 0 0 40px var(--menu-glow);
+  backdrop-filter: blur(8px) saturate(120%);
+  max-width: min(92vw, 1080px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.horizontal-nav::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.horizontal-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+.horizontal-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cat-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  display: grid;
+  grid-template-rows: auto auto;
+  align-items: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  min-width: 68px;
+  border-radius: 14px;
+  transition: transform 220ms var(--easing), border-color 180ms,
+    filter 220ms, background 180ms;
+}
+.cat-btn .cat-ico .icon.lg {
+  transition: transform 220ms var(--easing), filter 220ms var(--easing);
+  filter: drop-shadow(0 0 0 rgba(88, 199, 255, 0));
+  opacity: 0.95;
+}
+.cat-btn:hover .cat-ico .icon.lg {
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 16px rgba(88, 199, 255, 0.6));
+}
+.cat-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
+}
+
+.cat-btn.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--border);
+  box-shadow: 0 0 24px var(--menu-glow) inset, 0 0 24px var(--menu-glow);
+  transform: translateY(-2px);
+}
+.cat-btn.active .cat-ico .icon.lg {
+  transform: scale(1.12);
+  filter: drop-shadow(0 0 18px rgba(88, 199, 255, 0.75));
+}
+
+.cat-label {
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 280ms var(--easing), transform 280ms var(--easing);
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45),
+    0 0 8px rgba(88, 199, 255, 0.25);
+}
+.cat-btn.active .cat-label {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Vertical Item Bar */
+.vertical-nav {
+  width: min(92vw, 780px);
+  margin-top: 18px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  overflow: visible; /* bubbles float like PS3 */
+}
+
+.vertical-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(44vh, 420px);
+  overflow: visible; /* let bubble glow extend beyond list bounds */
+  display: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.vertical-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.vertical-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+.vertical-list.active {
+  display: block;
+}
+
+.vn-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid rgba(88, 199, 255, 0.12);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+  transition: transform 260ms var(--easing), background 200ms,
+    border-color 200ms, box-shadow 260ms var(--easing), filter 260ms;
+  will-change: transform, filter;
+}
+.vn-item:not(:last-child) {
+  margin-bottom: 8px;
+}
+.vn-item:hover,
+.vn-item:focus-visible {
+  transform: perspective(900px) translateZ(14px) scale(1.02);
+  background: var(--surface-strong);
+  border-color: rgba(88, 199, 255, 0.35);
+  filter: drop-shadow(0 0 16px rgba(88, 199, 255, 0.45));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+.thumb {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: none; /* remove thin outline to avoid clipping/overlap */
+  box-shadow: inset 0 0 14px rgba(88, 199, 255, 0.12);
+}
+
+.meta .title {
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  margin-bottom: 2px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45),
+    0 0 8px rgba(88, 199, 255, 0.2);
+}
+.meta .sub {
+  font-size: 0.88rem;
+  opacity: 0.85;
+}
+
+/* =========================================================
+   Responsive / Mobile
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .icon.lg {
+    width: 38px;
+    height: 38px;
+  }
+  .horizontal-nav {
+    margin-top: 18vh;
+    gap: clamp(14px, 4vw, 28px);
+  }
+  .cat-btn {
+    min-width: 60px;
+    padding: 8px 6px;
+  }
+  .vertical-nav {
+    width: min(94vw, 700px);
+  }
+}
+
+@media (max-width: 640px) {
+  .top-bar {
+    height: auto;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .clock {
+    min-width: 0;
+    font-size: 0.95rem;
+  }
+
+  .icon.lg {
+    width: 32px;
+    height: 32px;
+  }
+  .cat-label {
+    font-size: 0.9rem;
+  }
+
+  /* Make categories usable on small screens */
+  .horizontal-nav {
+    margin-top: 16vh;
+    max-width: 96vw;
+    overflow-x: auto;
+  }
+
+  /* Vertical list taller on mobile for easier touch */
+  .vertical-list {
+    max-height: min(54vh, 520px);
+  }
+  .vn-item {
+    padding: 14px 16px;
+  }
+  .thumb {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+/* Hide labels until active on very small screens to reduce clutter */
+@media (max-width: 420px) {
+  .cat-label {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  .cat-btn.active .cat-label {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================================
+   Reduced Motion Accessibility
+   ========================================================= */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  #particles {
+    display: none;
+  }
+}
+
+/* =========================================================
+   Utility
+   ========================================================= */
+
+.hidden {
+  display: none !important;
+}
+
+/* =========================================================
+   Classic PS3 XMB skin overrides (desktop)
+   - Remove card containers
+   - Horizontal icon row with glow + indicator dot
+   - Vertical "bubble" list aligned near screen center-left
+   - Center label with glowing text + disc bubble icon
+   ========================================================= */
+@media (min-width: 801px) {
+  /* Horizontal row like XMB (no panel) */
+  .horizontal-nav {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    padding: 0;
+    margin-top: 20vh;
+    gap: clamp(28px, 6vw, 64px);
+    max-width: unset;
+    /* PS3 style: no scrollbar visible on desktop */
+    overflow: visible;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .horizontal-nav::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  .cat-btn {
+    border: none;
+    background: transparent;
+    padding: 6px 6px;
+    min-width: auto;
+    position: relative;
+  }
+
+  .horizontal-nav .icon.lg {
+    width: clamp(46px, 5.6vw, 56px);
+    height: clamp(46px, 5.6vw, 56px);
+    opacity: 0.88;
+  }
+
+  .cat-btn:hover .cat-ico .icon.lg {
+    transform: scale(1.06);
+  }
+
+  .cat-btn.active {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    transform: none;
+  }
+  .cat-btn.active .cat-ico .icon.lg {
+    transform: scale(1.08);
+    color: var(--glow);
+    filter: drop-shadow(0 0 20px rgba(88, 199, 255, 0.85));
+  }
+
+  /* Glowing indicator dot below the active category */
+  .cat-btn.active::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -14px;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: radial-gradient(
+        50% 50% at 50% 50%,
+        rgba(255, 255, 255, 0.9) 0%,
+        rgba(120, 200, 255, 0.9) 40%,
+        rgba(120, 200, 255, 0.4) 100%
+      );
+    box-shadow: 0 0 18px rgba(88, 199, 255, 0.9),
+      0 0 36px rgba(88, 199, 255, 0.6);
+  }
+
+  /* Labels: subtle when inactive, bright when active */
+  .cat-label {
+    opacity: 0.65;
+    transform: none;
+    transition: opacity 220ms var(--easing);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45),
+      0 0 10px rgba(88, 199, 255, 0.35);
+  }
+  .cat-btn.active .cat-label {
+    opacity: 1;
+    text-shadow: 0 2px 3px rgba(0, 0, 0, 0.5),
+      0 0 18px rgba(88, 199, 255, 0.8);
+  }
+
+  /* Vertical list: bubble icons in a column near center-left */
+  .vertical-nav {
+    position: absolute;
+    top: 54vh;
+    left: 50%;
+    transform: translate(-280px, -50%);
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    width: auto;
+    z-index: 2;
+    /* Remove any container chrome so bubbles don't overlap borders */
+    border-radius: 0;
+    overflow: visible;
+    backdrop-filter: none;
+  }
+
+  .vertical-list {
+    padding: 0;
+    margin: 0;
+    max-height: 60vh;
+    overflow: visible; /* avoid clipping bubble glow on desktop */
+    display: none;
+    /* Hide scrollbars like PS3 (still scrollable by wheel/keys) */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .vertical-list::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  .vertical-list.active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .vn-item {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
+  .vn-item:not(:last-child) {
+    margin-bottom: 0;
+  }
+
+  /* Bubble icon */
+  .vn-item .thumb {
+    width: 60px;
+    height: 60px;
+    border-radius: 999px;
+    background:
+      radial-gradient(60% 60% at 30% 30%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.06) 55%, rgba(88,199,255,0.18) 100%),
+      linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(88,199,255,0.12) 100%);
+    border: none; /* remove outline to avoid overlapping with hover glow */
+    box-shadow:
+      0 10px 30px rgba(0, 0, 0, 0.35),
+      inset 0 10px 24px rgba(255, 255, 255, 0.14),
+      0 0 22px rgba(88, 199, 255, 0.45);
+    transition: transform 260ms var(--easing), filter 260ms var(--easing);
+  }
+  .vn-item:hover .thumb,
+  .vn-item:focus-visible .thumb {
+    transform: scale(1.08);
+    filter: drop-shadow(0 0 18px rgba(88, 199, 255, 0.75));
+  }
+
+  /* Hide per-item labels on desktop (center label shows active text) */
+  .vertical-list .meta {
+    display: none;
+  }
+
+  /* Center label (disc bubble + glowing title) */
+  .center-label {
+    position: absolute;
+    top: 54vh;
+    left: 50%;
+    transform: translate(-12px, -50%);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-weight: 700;
+    font-size: clamp(1.0rem, 2.1vw, 1.6rem);
+    letter-spacing: 0.2px;
+    color: var(--text);
+    text-shadow:
+      0 2px 3px rgba(0, 0, 0, 0.55),
+      0 0 14px rgba(88, 199, 255, 0.85),
+      0 0 30px rgba(88, 199, 255, 0.45);
+    z-index: 2;
+    pointer-events: none;
+    user-select: none;
+  }
+  .center-label .icon {
+    width: 22px;
+    height: 22px;
+    padding: 10px;
+    border-radius: 999px;
+    color: #d3ecff;
+    background:
+      radial-gradient(60% 60% at 30% 30%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.06) 55%, rgba(88,199,255,0.18) 100%),
+      linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(88,199,255,0.12) 100%);
+    border: 1px solid rgba(88, 199, 255, 0.45);
+    box-shadow:
+      0 6px 20px rgba(0, 0, 0, 0.35),
+      inset 0 10px 24px rgba(255, 255, 255, 0.14),
+      0 0 18px rgba(88, 199, 255, 0.45);
+  }
+  .center-label .wrap {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.08;
+  }
+  .center-label .wrap .title {
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    color: #ffffff;
+    text-shadow:
+      0 2px 3px rgba(0, 0, 0, 0.55),
+      0 0 16px rgba(88, 199, 255, 0.9),
+      0 0 30px rgba(88, 199, 255, 0.5);
+  }
+  .center-label .wrap .desc {
+    margin-top: 4px;
+    font-weight: 600;
+    font-size: clamp(0.8rem, 1.2vw, 0.95rem);
+    letter-spacing: 0.15px;
+    color: rgba(219, 236, 255, 0.9);
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.55),
+      0 0 10px rgba(88, 199, 255, 0.5);
+  }
+}
+
+/* =========================================================
+   Sub icon chrome removal overrides (ensure no outer clipping)
+   ========================================================= */
+.vertical-nav,
+.vertical-list {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.vertical-list .vn-item {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0;
+}
+.vertical-list .vn-item .thumb {
+  border: none !important;
+}
+
+/* =========================================================
+   Timeline lists (Experience/Education)
+   ========================================================= */
+.vertical-list[data-timeline] {
+  position: relative;
+  padding-left: 28px;
+  width: 100%;
+}
+.vertical-list[data-timeline]::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(88, 199, 255, 0.6), rgba(88, 199, 255, 0.18));
+  filter: drop-shadow(0 0 6px rgba(88, 199, 255, 0.45));
+}
+.vertical-list[data-timeline] .vn-item {
+  position: relative;
+  cursor: pointer;
+  padding: 12px 14px 12px 0;
+}
+.vertical-list[data-timeline] .vn-item::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 22px;
+  width: 10px;
+  height: 10px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #dff4ff 0%, rgba(88, 199, 255, 0.9) 45%, rgba(88, 199, 255, 0.25) 70%, rgba(88, 199, 255, 0) 71%);
+  box-shadow: 0 0 14px rgba(88, 199, 255, 0.75);
+}
+.vertical-list[data-timeline] .meta .title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 700;
+}
+.vertical-list[data-timeline] .meta .title .t {
+  font-weight: 700;
+}
+.vertical-list[data-timeline] .meta .title .date {
+  color: #d3ecff;
+  opacity: 0.95;
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+.vertical-list[data-timeline] .sub {
+  display: none;
+  margin-top: 6px;
+  opacity: 0.95;
+}
+.vertical-list[data-timeline] .vn-item.expanded .sub {
+  display: block;
+}
+
+/* Timeline presentation mode: center container and card-like items */
+body.timeline-mode .center-label {
+  display: none !important;
+}
+body.timeline-mode .vertical-nav {
+  position: absolute;
+  top: 56vh;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 900px);
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-strong), 0 0 30px var(--menu-glow);
+  backdrop-filter: blur(8px) saturate(120%);
+}
+body.timeline-mode .vertical-list {
+  max-height: min(50vh, 520px);
+  overflow-y: auto;
+}
+body.timeline-mode .vertical-list[data-timeline] {
+  padding-left: 36px;
+}
+body.timeline-mode .vertical-list[data-timeline]::before {
+  left: 18px;
+}
+body.timeline-mode .vertical-list .meta {
+  display: block !important;
+}
+body.timeline-mode .vn-item {
+  display: block !important;
+  background: var(--surface) !important;
+  border: 1px solid rgba(88, 199, 255, 0.16) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28) !important;
+  padding: 10px 12px !important;
+  border-radius: 12px !important;
+}
+body.timeline-mode .vn-item:not(:last-child) {
+  margin-bottom: 10px !important;
+}
+
+/* Title row layout fixes (prevent wrap collision between name and date) */
+.vertical-list[data-timeline] .meta .title .t {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.vertical-list[data-timeline] .meta .title .date {
+  flex: 0 0 auto;
+}
+/* Typography tweaks for readability */
+body.timeline-mode .meta .title {
+  font-size: 1.02rem;
+}
+body.timeline-mode .meta .sub {
+  line-height: 1.25;
+}
+
+@media (min-width: 801px) {
+  .vertical-list[data-timeline] .thumb {
+    display: none;
+  }
+  .vertical-list[data-timeline] .meta {
+    display: block !important;
+  }
+  .vertical-list[data-timeline] {
+    align-items: stretch;
+  }
+}
+
+/* Overrides requested:
+   1) Remove glowing bullet points in Experience/Education timelines
+   2) Make Skills list scrollable (with visible thin scrollbar) */
+.vertical-list[data-timeline] .vn-item::before {
+  content: none !important; /* remove dot marker */
+}
+
+/* Skills list: scrollable with thin scrollbar */
+#vlist-network {
+  max-height: min(50vh, 520px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-width: thin;         /* Firefox */
+  -ms-overflow-style: auto;      /* IE/Edge Legacy */
+}
+#vlist-network::-webkit-scrollbar {
+  width: 8px;                    /* Chrome/Safari */
+  height: 8px;
+}
+#vlist-network::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+}
+#vlist-network::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Skills desktop overrides: show text list (no icons), restore card styling, keep scroll */
+@media (min-width: 801px) {
+  #vlist-network.vertical-list.active {
+    display: block !important;
+  }
+  #vlist-network .meta {
+    display: block !important;
+  }
+  #vlist-network .thumb {
+    display: none !important;
+  }
+  #vlist-network {
+    width: min(92vw, 780px);
+    max-height: min(50vh, 520px);
+    overflow-y: auto;
+    padding: 6px;
+  }
+  #vlist-network .vn-item {
+    display: block !important;                  /* no grid gap reserved for icons */
+    grid-template-columns: 1fr !important;      /* collapse grid to single column */
+    align-items: center !important;
+    background: var(--surface) !important;
+    border: 1px solid rgba(88, 199, 255, 0.16) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28) !important;
+    padding: 10px 12px !important;
+  }
+  #vlist-network .vn-item:not(:last-child) {
+    margin-bottom: 8px !important;
+  }
+}
+
+/* Skills box UI mode (centered panel, mouse-wheel scroll, narrower item width) */
+body.skills-mode .center-label {
+  display: none !important; /* avoid overlap with focused text */
+}
+body.skills-mode .vertical-nav {
+  position: absolute;
+  top: 56vh;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  /* match Experience/Education container alignment and width */
+  width: min(92vw, 900px);
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-strong), 0 0 30px var(--menu-glow);
+  backdrop-filter: blur(8px) saturate(120%);
+  z-index: 3;
+}
+body.skills-mode #vlist-network.vertical-list.active {
+  display: block !important;             /* only the Skills list should flip to block */
+}
+body.skills-mode #vlist-network {
+  /* fixed height so only ~10 items show and list scrolls internally */
+  height: 480px;
+  overflow-y: auto !important;           /* mouse wheel scroll inside component */
+  padding: 6px;
+  overscroll-behavior: contain;          /* prevent scroll chaining to page */
+  -webkit-overflow-scrolling: touch;     /* smooth on iOS */
+  touch-action: pan-y;                   /* ensure vertical scrolling in component */
+  margin-inline: auto;                   /* center within the panel */
+  pointer-events: auto;                  /* ensure wheel events target the list */
+  scrollbar-width: thin !important;      /* override global hidden scrollbar */
+}
+body.skills-mode #vlist-network .vn-item {
+  display: block !important;
+  grid-template-columns: 1fr !important; /* no icon column */
+  background: var(--surface) !important;
+  border: 1px solid rgba(88, 199, 255, 0.16) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28) !important;
+  padding: 10px 12px !important;
+  width: 96%;                            /* align similar to timeline width */
+  margin: 0 auto;                        /* center within panel */
+}
+body.skills-mode #vlist-network .vn-item:not(:last-child) {
+  margin-bottom: 8px !important;
+}
+
+/* visible scrollbar for skills list even though global hides others */
+body.skills-mode #vlist-network::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+body.skills-mode #vlist-network::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+}
+body.skills-mode #vlist-network::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* =========================================================
+   Sweep line animation + top-left hints and icon color tweaks
+   ========================================================= */
+
+.sweep-line {
+  opacity: 0.85;
+  filter: drop-shadow(0 0 10px rgba(88, 199, 255, 0.7));
+  stroke-dasharray: 220 1200;
+  stroke-dashoffset: 0;
+  animation: sweepMotion 22s linear infinite;
+}
+
+@keyframes sweepMotion {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -1420;
+  }
+}
+
+.xmb-hints {
+  position: absolute;
+  top: 14vh;
+  left: 50%;
+  transform: translateX(-280px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: clamp(0.9rem, 1.6vw, 1.05rem);
+  color: rgba(223, 244, 255, 0.8);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5),
+    0 0 12px rgba(88, 199, 255, 0.55);
+  pointer-events: none;
+  user-select: none;
+}
+.xmb-hints .hint {
+  opacity: 0.9;
+}
+
+@media (max-width: 800px) {
+  .xmb-hints {
+    display: none;
+  }
+}
+
+/* Muted icon tint when inactive; bright cyan when active */
+@media (min-width: 801px) {
+  .horizontal-nav .icon.lg {
+    color: #bfe7ff;
+    opacity: 0.55;
+  }
+  .cat-btn.active .cat-ico .icon.lg {
+    color: var(--glow);
+    opacity: 1;
+  }
+}

@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="dark" />
+    <title>PS3 XMB Style UI</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/css/styles.css" />
+  </head>
+  <body>
+    <!-- Background: gradient + waves + particles -->
+    <div id="background" aria-hidden="true">
+      <canvas id="particles" aria-hidden="true"></canvas>
+
+      <!-- Animated waves layer -->
+      <svg
+        id="waves"
+        aria-hidden="true"
+        width="100%"
+        height="100%"
+        preserveAspectRatio="none"
+        viewBox="0 0 1440 900"
+      >
+        <defs>
+          <linearGradient id="waveGrad" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stop-color="#58C7FF" stop-opacity="0.15" />
+            <stop offset="100%" stop-color="#1E6FA8" stop-opacity="0.05" />
+          </linearGradient>
+          <linearGradient id="sweepGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0" />
+            <stop offset="30%" stop-color="#DFF4FF" stop-opacity="0.85" />
+            <stop offset="70%" stop-color="#DFF4FF" stop-opacity="0.85" />
+            <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+          </linearGradient>
+          <filter id="softBlur" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="12" />
+          </filter>
+        </defs>
+        <g filter="url(#softBlur)">
+          <path
+            class="wave wave-a"
+            fill="url(#waveGrad)"
+            d="M0,560 C180,520 320,640 520,600 C720,560 820,420 1040,460 C1260,500 1360,620 1440,600 L1440,900 L0,900 Z"
+          />
+          <path
+            class="wave wave-b"
+            fill="url(#waveGrad)"
+            d="M0,460 C200,420 360,520 560,510 C760,500 880,380 1080,420 C1280,460 1400,540 1440,520 L1440,900 L0,900 Z"
+          />
+          <path
+            class="wave wave-c"
+            fill="url(#waveGrad)"
+            d="M0,640 C180,620 340,680 540,660 C740,640 880,560 1080,580 C1280,600 1380,680 1440,670 L1440,900 L0,900 Z"
+          />
+          <path
+            class="sweep-line"
+            fill="none"
+            stroke="url(#sweepGrad)"
+            stroke-width="3"
+            stroke-linecap="round"
+            d="M0,520 C220,500 420,560 660,540 C900,520 1100,480 1440,500"
+          />
+        </g>
+      </svg>
+    </div>
+
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="top-left">
+        <div class="user-pill">
+          <svg class="icon sm" aria-hidden="true">
+            <use href="#icon-user" />
+          </svg>
+          <span class="user-name" title="Profile">Bayar Tsogtbaatar</span>
+        </div>
+        <div class="header-hint">Resume</div>
+      </div>
+      <!-- top-right removed per request -->
+    </header>
+
+    <!-- XMB Main -->
+    <main class="xmb" role="application">
+      <nav
+        class="horizontal-nav"
+        role="tablist"
+        aria-label="Primary Category Navigation"
+      >
+        <button
+          class="cat-btn active"
+          role="tab"
+          aria-selected="true"
+          aria-controls="vlist-video"
+          data-category="video"
+        >
+          <div class="cat-ico">
+            <svg class="icon lg" aria-hidden="true">
+              <use href="#icon-video" />
+            </svg>
+          </div>
+          <span class="cat-label">Experience</span>
+        </button>
+
+        <button
+          class="cat-btn"
+          role="tab"
+          aria-selected="false"
+          aria-controls="vlist-music"
+          data-category="music"
+        >
+          <div class="cat-ico">
+            <svg class="icon lg" aria-hidden="true">
+              <use href="#icon-music" />
+            </svg>
+          </div>
+          <span class="cat-label">Education</span>
+        </button>
+
+        <button
+          class="cat-btn"
+          role="tab"
+          aria-selected="false"
+          aria-controls="vlist-network"
+          data-category="network"
+        >
+          <div class="cat-ico">
+            <svg class="icon lg" aria-hidden="true">
+              <use href="#icon-network" />
+            </svg>
+          </div>
+          <span class="cat-label">Skills</span>
+        </button>
+
+        <!-- Projects and Friends removed per request -->
+      </nav>
+
+      <div id="center-label" class="center-label text-glow" aria-live="polite"></div>
+
+      <!-- Vertical Item Lists -->
+      <section class="vertical-nav" aria-label="Contextual Items">
+        <!-- Video -->
+        <ul
+          id="vlist-video"
+          class="vertical-list active"
+          data-category="video"
+          role="tabpanel"
+          aria-labelledby="video"
+          data-timeline="true"
+        >
+          <!-- Experience (timeline: click to expand for details) -->
+          <li class="vn-item" tabindex="0">
+            <div class="meta">
+              <div class="title"><span class="t">Amazon Web Services</span><span class="date">Nov 2022 — Present</span></div>
+              <div class="sub">Associate Cloud App Developer<br>• Creating apps and POCs on AWS.</div>
+            </div>
+          </li>
+
+          <li class="vn-item" tabindex="0">
+            <div class="meta">
+              <div class="title"><span class="t">Virtusa (Fidelity Investments)</span><span class="date">Jan 2022 — Nov 2022</span></div>
+              <div class="sub">Software Engineer<br>• Modernizing core apps and migrating on‑prem to AKS; dashboards support.<br>• Spring MVC/Spring Boot, Tomcat, Cucumber, Jenkins, JFrog, UDeploy, Datadog, Splunk, kubectl.<br>• Microservices & design patterns. Learning: Spring Cloud/Security, RabbitMQ, Kafka/ZK, Docker, Kubernetes, Jenkins, MySQL, MongoDB, GraphQL, Redis, Prometheus, Resilience4j.</div>
+            </div>
+          </li>
+
+          <li class="vn-item" tabindex="0">
+            <div class="meta">
+              <div class="title"><span class="t">Virtusa (EWS/Zelle)</span><span class="date">Oct 2020 — Nov 2021</span></div>
+              <div class="sub">Software Engineer<br>• Data Management platform: data quality & analysis.<br>• Hive, Solr, HBase, Kafka, Hadoop, Spark.<br>• Features across environments; JSON (NoSQL) & XML manipulation.<br>• TestNG & Cucumber; JMeter performance; Chef deployments.</div>
+            </div>
+          </li>
+
+          <li class="vn-item" tabindex="0">
+            <div class="meta">
+              <div class="title"><span class="t">Mova Globes</span><span class="date">Aug 2018 — Oct 2018</span></div>
+              <div class="sub">Intern<br>• Automated engravings on glass bases using CAD.<br>• Served 50+ customers/companies; delivered 500+ engraved bases.</div>
+            </div>
+          </li>
+        </ul>
+
+        <!-- Music -->
+        <ul
+          id="vlist-music"
+          class="vertical-list"
+          data-category="music"
+          role="tabpanel"
+          aria-labelledby="music"
+          hidden
+          data-timeline="true"
+        >
+          <!-- Education (timeline) -->
+          <li class="vn-item" tabindex="0">
+            <div class="meta">
+              <div class="title"><span class="t">UC San Diego</span><span class="date">Aug 2015 — June 2020</span></div>
+              <div class="sub">B.S. in Mathematics — Computer Science</div>
+            </div>
+          </li>
+          <li class="vn-item" tabindex="0">
+            <div class="meta">
+              <div class="title"><span class="t">Inderkum High School</span><span class="date">Aug 2011 — May 2015</span></div>
+              <div class="sub">High School</div>
+            </div>
+          </li>
+        </ul>
+
+        <!-- Network -->
+        <ul
+          id="vlist-network"
+          class="vertical-list"
+          data-category="network"
+          role="tabpanel"
+          aria-labelledby="network"
+          hidden
+        >
+          <!-- Skills (individual items, scrollable, no icons) -->
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">Java</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">C/C++</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">Python</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">HTML</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">CSS</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">JavaScript</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">SQL</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">ARM</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">Haskell</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">R</div></div></li>
+
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">Git</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">GitLab</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">Docker</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">Angular</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">REST API</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">SOAP API</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">Veracode</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">JMeter</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">Gatling</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">Gradle</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">Postman</div></div></li>
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">AWS</div></div></li>
+
+          <li class="vn-item" tabindex="0"><div class="meta"><div class="title">English</div></div></li>
+        </ul>
+
+        <!-- Projects and Friends lists removed per request -->
+      </section>
+    </main>
+
+    <!-- SVG Icon Sprite -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute; width:0; height:0; overflow:hidden;">
+      <!-- Video -->
+      <symbol id="icon-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="5" width="14" height="14" rx="2" />
+        <polygon points="10,9 14,12 10,15" fill="currentColor" stroke="none" />
+        <path d="M17 9l4-2v10l-4-2" />
+      </symbol>
+
+      <!-- Music -->
+      <symbol id="icon-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 18a3 3 0 1 1-2-2.83V6l10-2v9" />
+        <circle cx="17" cy="17" r="3" />
+      </symbol>
+
+      <!-- Gamepad -->
+      <symbol id="icon-game" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 8h10a4 4 0 0 1 3.87 3.08l.7 2.8a3 3 0 0 1-2.9 3.72c-.9 0-1.74-.43-2.27-1.16l-.73-.99H8.33l-.73.99A2.86 2.86 0 0 1 5.33 18a3 3 0 0 1-2.9-3.72l.7-2.8A4 4 0 0 1 7 8Z" />
+        <path d="M9 12h-3M7.5 10.5v3" />
+        <circle cx="16.5" cy="12" r="1" />
+        <circle cx="19" cy="10.5" r="1" />
+      </symbol>
+
+      <!-- Network / Globe -->
+      <symbol id="icon-network" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M3 12h18" />
+        <path d="M12 3c2.5 3 2.5 15 0 18" />
+        <path d="M5 7c2 .8 4.5 1.2 7 1.2s5-.4 7-1.2" />
+        <path d="M5 17c2-.8 4.5-1.2 7-1.2s5 .4 7 1.2" />
+      </symbol>
+
+      <!-- Store / Bag -->
+      <symbol id="icon-store" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 9h16l-1 10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 9Z" />
+        <path d="M9 9V7a3 3 0 0 1 6 0v2" />
+        <path d="M4 9l2-4h12l2 4" />
+      </symbol>
+
+      <!-- Friends -->
+      <symbol id="icon-friends" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="8.5" r="3" />
+        <path d="M2.5 19a6.5 6.5 0 0 1 13 0" />
+        <circle cx="17" cy="9.5" r="2.5" />
+        <path d="M21.5 19a5.5 5.5 0 0 0-6-4.8" />
+      </symbol>
+
+      <!-- User -->
+      <symbol id="icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 20a8 8 0 0 1 16 0" />
+      </symbol>
+
+      <!-- Bell -->
+      <symbol id="icon-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 8a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6" />
+        <path d="M9 18a3 3 0 0 0 6 0" />
+      </symbol>
+
+      <!-- Wallet -->
+      <symbol id="icon-wallet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="6" width="18" height="12" rx="2" />
+        <path d="M16 12h4" />
+        <path d="M3 10h11a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2H3" />
+      </symbol>
+    </svg>
+
+    <script src="assets/js/main.js" defer></script>
+  </body>
+</html>
