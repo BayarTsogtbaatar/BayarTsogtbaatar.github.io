@@ -56,7 +56,7 @@ Create `package.json`:
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test tests/*.test.mjs",
-    "check": "npm.cmd test && npm.cmd build"
+    "check": "npm.cmd test && npm.cmd run build"
   },
   "dependencies": {
     "gsap": "3.15.0",
@@ -1543,7 +1543,7 @@ Run:
 
 ```powershell
 npm.cmd test
-npm.cmd build
+npm.cmd run build
 ```
 
 Expected: tests pass and Vite builds `dist/` without errors.
@@ -1551,7 +1551,7 @@ Expected: tests pass and Vite builds `dist/` without errors.
 - [ ] **Step 4: Commit Task 8**
 
 ```powershell
-git add src/scene.js tests/structure.test.mjs dist
+git add src/scene.js tests/structure.test.mjs
 git commit -m "Add Three.js singularity scene"
 ```
 
@@ -1620,7 +1620,7 @@ Run:
 
 ```powershell
 npm.cmd test
-npm.cmd build
+npm.cmd run build
 ```
 
 Expected: tests pass and Vite builds without errors.
@@ -1628,7 +1628,7 @@ Expected: tests pass and Vite builds without errors.
 - [ ] **Step 4: Commit Task 9**
 
 ```powershell
-git add src/main.js tests/structure.test.mjs dist
+git add src/main.js tests/structure.test.mjs
 git commit -m "Wire singularity portfolio app"
 ```
 
@@ -1713,7 +1713,7 @@ Run:
 
 ```powershell
 npm.cmd test
-npm.cmd build
+npm.cmd run build
 ```
 
 Expected: both commands pass.
@@ -1723,7 +1723,7 @@ Expected: both commands pass.
 If verification required fixes:
 
 ```powershell
-git add index.html src tests package.json package-lock.json vite.config.js dist
+git add index.html src tests package.json package-lock.json vite.config.js
 git commit -m "Polish singularity portfolio verification"
 ```
 

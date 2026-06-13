@@ -67,3 +67,32 @@ test("CSS contains required visual, fallback, and responsive selectors", () => {
     assert.ok(css.includes(selector), `Missing selector ${selector}`);
   }
 });
+
+test("scene helper computes deterministic reduced-motion node positions", async () => {
+  const { computeNodePosition } = await import("../src/scene.js");
+  const normal = computeNodePosition(NODE_LAYOUT[0], 10, false);
+  const reduced = computeNodePosition(NODE_LAYOUT[0], 10, true);
+  assert.notDeepEqual(normal, reduced);
+  assert.ok(Number.isFinite(normal.x));
+  assert.ok(Number.isFinite(normal.y));
+  assert.ok(Number.isFinite(normal.z));
+});
+
+test("main app imports styles, content, state, and UI modules", () => {
+  const source = readFileSync("src/main.js", "utf8");
+  for (const fragment of [
+    'import "./styles.css"',
+    'from "./content.js"',
+    'from "./state.js"',
+    'from "./ui.js"'
+  ]) {
+    assert.ok(source.includes(fragment), `Missing import fragment ${fragment}`);
+  }
+});
+
+test("main app lazy-loads the heavy Three.js scene module", () => {
+  const source = readFileSync("src/main.js", "utf8");
+  assert.ok(source.includes('import("./scene.js")'));
+  assert.ok(source.includes("root: document.documentElement"));
+  assert.equal(source.includes('from "./scene.js"'), false);
+});

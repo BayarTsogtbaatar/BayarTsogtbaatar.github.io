@@ -155,6 +155,12 @@ h1 {
   opacity: 1;
 }
 
+.webgl-fallback .orbit-node-button {
+  left: min(78vw, calc(100vw - 8rem));
+  top: calc(34% + var(--node-index) * 5.2rem);
+  opacity: 1 !important;
+}
+
 .orbit-controls {
   position: fixed;
   inset: 0;
