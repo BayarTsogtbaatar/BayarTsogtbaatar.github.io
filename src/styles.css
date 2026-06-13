@@ -187,12 +187,31 @@ h1 {
   transition: transform 220ms var(--ease), border-color 220ms var(--ease), background 220ms var(--ease), opacity 220ms var(--ease);
 }
 
+.orbit-node-button::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: rgba(132, 220, 255, 0.88);
+  box-shadow: 0 0 1.2rem rgba(120, 215, 255, 0.8), 0 0 2.4rem rgba(255, 170, 82, 0.26);
+  pointer-events: none;
+  transform: translate(calc(var(--connector-x, 0px) - 50%), calc(var(--connector-y, 0px) - 50%));
+  transition: opacity 220ms var(--ease), transform 220ms var(--ease);
+}
+
 .orbit-node-button:hover,
 .orbit-node-button:focus-visible,
 .orbit-node-button[aria-selected="true"] {
   transform: translate(-50%, -50%) scale(1.06);
   border-color: rgba(120, 215, 255, 0.72);
   background: rgba(9, 18, 42, 0.8);
+}
+
+html.is-distorting .orbit-node-button {
+  filter: saturate(1.18) contrast(1.08);
 }
 
 .node-label {
@@ -344,6 +363,15 @@ h1 {
   background: radial-gradient(circle at center, rgba(120, 215, 255, 0.12), transparent 70%);
 }
 
+html.contact-field-active .contact-particle-field {
+  border-color: rgba(255, 143, 199, 0.42);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 178, 91, 0.18), transparent 28%),
+    radial-gradient(circle at 58% 55%, rgba(120, 215, 255, 0.22), transparent 44%),
+    radial-gradient(circle at center, rgba(255, 143, 199, 0.18), transparent 72%);
+  box-shadow: inset 0 0 4rem rgba(120, 215, 255, 0.12), 0 0 3rem rgba(255, 143, 199, 0.16);
+}
+
 @media (max-width: 760px) {
   body {
     overflow: auto;
@@ -359,7 +387,7 @@ h1 {
   .orbit-node-button {
     position: absolute;
     left: 50%;
-    top: calc(60% + (var(--node-index) - 2) * 7.5rem);
+    top: calc(62% + (var(--node-index) - 2) * 6.2rem);
     width: min(18rem, calc(100vw - 2rem));
     max-width: min(18rem, calc(100vw - 2rem));
     min-width: 0;

@@ -29,7 +29,12 @@ test("node layout includes deliberate non-overlapping label anchors", () => {
   assert.ok(NODE_LAYOUT.every((node) => Number.isFinite(node.labelX)));
   assert.ok(NODE_LAYOUT.every((node) => Number.isFinite(node.labelY)));
   assert.ok(NODE_LAYOUT.every((node) => node.labelX >= 0.25 && node.labelX <= 0.82));
-  assert.ok(NODE_LAYOUT.every((node) => node.labelY >= 0.42 && node.labelY <= 0.75));
+  assert.ok(NODE_LAYOUT.every((node) => node.labelY >= 0.42 && node.labelY <= 0.88));
+});
+
+test("contact label anchor leaves the event horizon unobstructed", () => {
+  const contact = NODE_LAYOUT.find((node) => node.id === "contact");
+  assert.ok(contact.labelY >= 0.84);
 });
 
 test("performance limits cover low-end device tuning", () => {
@@ -50,6 +55,20 @@ test("post-processing config defines composer passes and responsive bloom", () =
   assert.ok(POST_PROCESSING.bloom.desktop.radius > POST_PROCESSING.bloom.mobile.radius);
   assert.equal(POST_PROCESSING.bloom.reducedMotion.strength, 0);
   assert.ok(POST_PROCESSING.composerScale.mobile < POST_PROCESSING.composerScale.desktop);
+});
+
+test("post-processing shader preserves a dark event-horizon mask", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  assert.ok(source.includes("uHorizonCenter"));
+  assert.ok(source.includes("uHorizonShadow"));
+  assert.ok(source.includes("horizonShadow"));
+});
+
+test("post-processing bloom stays restrained for dark scene contrast", () => {
+  assert.ok(POST_PROCESSING.bloom.desktop.threshold >= 0.38);
+  assert.ok(POST_PROCESSING.bloom.desktop.strength <= 0.62);
+  assert.ok(POST_PROCESSING.bloom.mobile.threshold >= 0.42);
+  assert.ok(POST_PROCESSING.bloom.mobile.strength <= 0.38);
 });
 
 test("shader settings cover singularity, accretion disk, and particles", () => {
@@ -89,6 +108,7 @@ test("index contains the Vite app shell", () => {
   assert.ok(html.includes('id="orbit-controls"'));
   assert.ok(html.includes('id="section-panels"'));
   assert.ok(html.includes('type="module" src="/src/main.js"'));
+  assert.ok(html.includes('rel="icon"'));
 });
 
 test("CSS contains required visual, fallback, and responsive selectors", () => {
@@ -106,6 +126,11 @@ test("CSS contains required visual, fallback, and responsive selectors", () => {
   ]) {
     assert.ok(css.includes(selector), `Missing selector ${selector}`);
   }
+});
+
+test("mobile orbit stack is placed below the hero copy with compact spacing", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.ok(css.includes("top: calc(62% + (var(--node-index) - 2) * 6.2rem)"));
 });
 
 test("scene helper computes deterministic reduced-motion node positions", async () => {
@@ -140,6 +165,29 @@ test("scene module imports post-processing passes and uses custom shader materia
   ]) {
     assert.ok(source.includes(fragment), `Missing scene fragment ${fragment}`);
   }
+});
+
+test("event horizon core renders as an unobscured black layer", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  assert.ok(source.includes("transparent: true,"));
+  assert.ok(source.includes("horizonCore.renderOrder = 10"));
+  assert.ok(source.includes("horizonCore.material.depthTest = false"));
+  assert.ok(source.includes("horizonCore.material.depthWrite = false"));
+});
+
+test("particle shader clamps point size to avoid starfield washout", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  assert.ok(source.includes("gl_PointSize = clamp("));
+  assert.ok(source.includes("sizes[i] = 0.16 + Math.random() * 0.5"));
+});
+
+test("scene keeps HTML labels on stable anchors and tracks nodes with connector pings", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  assert.ok(source.includes("const x = clamp(anchorX"));
+  assert.ok(source.includes("const y = clamp(anchorY"));
+  assert.ok(source.includes("activeSectionId ? 0 : 14"));
+  assert.ok(source.includes("--connector-x"));
+  assert.ok(source.includes("--connector-y"));
 });
 
 test("main app imports styles, content, state, and UI modules", () => {

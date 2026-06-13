@@ -127,8 +127,8 @@ const particleVertexShader = `
     vColor = aColor;
     float twinkle = sin(uTime * (0.8 + aSeed * 0.32) + aSeed * 12.0) * 0.5 + 0.5;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    float depthScale = 240.0 / max(4.0, -mvPosition.z);
-    gl_PointSize = aSize * uPixelRatio * depthScale * (0.82 + twinkle * 0.34 + uContactBoost * 0.32);
+    float depthScale = 92.0 / max(14.0, -mvPosition.z);
+    gl_PointSize = clamp(aSize * uPixelRatio * depthScale * (0.82 + twinkle * 0.28 + uContactBoost * 0.28), 0.7, 9.0);
     vAlpha = uFade * (0.58 + twinkle * 0.42);
     gl_Position = projectionMatrix * mvPosition;
   }
@@ -156,7 +156,9 @@ const cinematicPostShader = {
     uAberration: { value: POST_PROCESSING.shaderPass.aberration },
     uVignette: { value: POST_PROCESSING.shaderPass.vignette },
     uGrain: { value: POST_PROCESSING.shaderPass.grain },
-    uLens: { value: POST_PROCESSING.shaderPass.lensDistortion }
+    uLens: { value: POST_PROCESSING.shaderPass.lensDistortion },
+    uHorizonCenter: { value: new THREE.Vector2(0.5, 0.58) },
+    uHorizonShadow: { value: 0.88 }
   },
   vertexShader: `
     varying vec2 vUv;
@@ -174,6 +176,8 @@ const cinematicPostShader = {
     uniform float uVignette;
     uniform float uGrain;
     uniform float uLens;
+    uniform vec2 uHorizonCenter;
+    uniform float uHorizonShadow;
 
     varying vec2 vUv;
 
@@ -193,6 +197,9 @@ const cinematicPostShader = {
       float grain = (random(vUv * uResolution + uTime * 34.0) - 0.5) * uGrain;
       float vignette = smoothstep(0.84, 0.16, length(centered));
       color = color * mix(1.0, vignette, uVignette) + grain;
+      float horizonDistance = length((vUv - uHorizonCenter) * vec2(1.0, 1.28));
+      float horizonShadow = smoothstep(0.2, 0.055, horizonDistance) * uHorizonShadow;
+      color *= 1.0 - horizonShadow;
       gl_FragColor = vec4(color, 1.0);
     }
   `
@@ -277,7 +284,7 @@ function createStarField({ count, spread }) {
     colors[index] = tint * (0.62 + warm);
     colors[index + 1] = tint * (0.82 + warm * 0.35);
     colors[index + 2] = tint;
-    sizes[i] = 0.9 + Math.random() * 1.9;
+    sizes[i] = 0.16 + Math.random() * 0.5;
     seeds[i] = Math.random() * 100;
   }
 
@@ -287,7 +294,7 @@ function createStarField({ count, spread }) {
   geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
   geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
 
-  return new THREE.Points(geometry, createParticleMaterial({ opacity: 0.86 }));
+  return new THREE.Points(geometry, createParticleMaterial({ opacity: 0.72 }));
 }
 
 function createAccretionDust(count) {
@@ -596,12 +603,20 @@ export function createSingularityScene({
   scene.add(singularity);
 
   const horizonCore = new THREE.Mesh(
-    new THREE.SphereGeometry(1.12, 128, 64),
-    new THREE.MeshBasicMaterial({ color: COLORS.eventHorizon })
+    new THREE.SphereGeometry(1.18, 128, 64),
+    new THREE.MeshBasicMaterial({
+      color: COLORS.eventHorizon,
+      transparent: true,
+      opacity: 1
+    })
   );
+  horizonCore.renderOrder = 10;
+  horizonCore.material.depthTest = false;
+  horizonCore.material.depthWrite = false;
   singularity.add(horizonCore);
 
   const horizonShell = createEventHorizonShell();
+  horizonShell.renderOrder = 9;
   singularity.add(horizonShell);
 
   const innerDisk = createAccretionDisk({
@@ -673,6 +688,7 @@ export function createSingularityScene({
     bloomPass.radius = activeBloom.radius;
     bloomPass.threshold = activeBloom.threshold;
     cinematicPass.uniforms.uResolution.value.set(width * composerPixelRatio, height * composerPixelRatio);
+    cinematicPass.uniforms.uHorizonCenter.value.set(0.5, isMobileViewport() ? 0.55 : 0.58);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
 
@@ -705,12 +721,11 @@ export function createSingularityScene({
       const layout = group.userData.layout;
       const projectedX = (projected.x * 0.5 + 0.5) * width;
       const projectedY = (-projected.y * 0.5 + 0.5) * height;
-      const drift = reducedMotion || isMobileViewport() ? 0 : 14;
-      const blend = reducedMotion || isMobileViewport() ? 0 : 0.34;
+      const drift = reducedMotion || isMobileViewport() ? 0 : activeSectionId ? 0 : 14;
       const anchorX = layout.labelX * width + Math.sin(elapsed * 0.32 + layout.phase) * drift;
       const anchorY = layout.labelY * height + Math.cos(elapsed * 0.27 + layout.phase) * drift;
-      const x = clamp(lerp(anchorX, projectedX, blend), 120, width - 120);
-      const y = clamp(lerp(anchorY, projectedY, blend), 84, height - 72);
+      const x = clamp(anchorX, 120, width - 120);
+      const y = clamp(anchorY, 84, height - 72);
       const depthOpacity = projected.z > 1 ? 0.18 : 0.58 + Math.max(0, group.position.z / 13);
 
       button.style.setProperty("--node-x", `${x}px`);

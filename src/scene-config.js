@@ -9,7 +9,7 @@ export const NODE_LAYOUT = [
   { id: "projects", radius: 6.7, speed: 0.13, phase: 1.4, y: -0.2, labelX: 0.68, labelY: 0.72, color: "#b6a3ff" },
   { id: "skills", radius: 5.1, speed: 0.22, phase: 2.55, y: 0.7, labelX: 0.31, labelY: 0.48, color: "#ffcc73" },
   { id: "education", radius: 7.3, speed: 0.11, phase: 3.8, y: -0.55, labelX: 0.40, labelY: 0.72, color: "#8fffe0" },
-  { id: "contact", radius: 6.1, speed: 0.16, phase: 5.05, y: 0.05, labelX: 0.56, labelY: 0.56, color: "#ff8fc7" }
+  { id: "contact", radius: 6.1, speed: 0.16, phase: 5.05, y: 0.05, labelX: 0.56, labelY: 0.86, color: "#ff8fc7" }
 ];
 
 export const COLORS = {
@@ -37,14 +37,14 @@ export const POST_PROCESSING = {
   },
   bloom: {
     desktop: {
-      strength: 0.78,
-      radius: 0.46,
-      threshold: 0.22
+      strength: 0.42,
+      radius: 0.22,
+      threshold: 0.56
     },
     mobile: {
-      strength: 0.42,
-      radius: 0.24,
-      threshold: 0.34
+      strength: 0.24,
+      radius: 0.14,
+      threshold: 0.58
     },
     reducedMotion: {
       strength: 0,
