@@ -16,14 +16,19 @@ const profileRoot = document.getElementById("profile-root");
 const orbitControls = document.getElementById("orbit-controls");
 const sectionPanels = document.getElementById("section-panels");
 const app = document.getElementById("app");
+const appLoader = document.getElementById("app-loader");
 const canvas = document.getElementById("singularity-canvas");
 const webglStatus = document.getElementById("webgl-status");
 
 const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+const LOADER_MIN_VISIBLE_MS = motionQuery.matches ? 120 : 620;
+const LOADER_EXIT_MS = motionQuery.matches ? 0 : 700;
+const loaderStartedAt = window.performance.now();
 let state = createInitialState({ reducedMotion: motionQuery.matches });
 let sceneController = null;
 let sceneModulePromise = null;
 let transitionTimer = 0;
+let loaderFinishing = false;
 
 function canUseWebGL() {
   try {
@@ -50,6 +55,24 @@ function clearTransitionTimer() {
     window.clearTimeout(transitionTimer);
     transitionTimer = 0;
   }
+}
+
+function finishStartupLoader() {
+  if (!appLoader || loaderFinishing || app.classList.contains("is-scene-ready")) return;
+
+  loaderFinishing = true;
+  const elapsed = window.performance.now() - loaderStartedAt;
+  const remainingVisibleTime = Math.max(0, LOADER_MIN_VISIBLE_MS - elapsed);
+
+  window.setTimeout(() => {
+    app.classList.remove("is-loading-scene");
+    app.classList.add("is-scene-ready");
+    app.setAttribute("aria-busy", "false");
+
+    window.setTimeout(() => {
+      appLoader.hidden = true;
+    }, LOADER_EXIT_MS);
+  }, remainingVisibleTime);
 }
 
 function getNodeButton(sectionId) {
@@ -222,6 +245,7 @@ async function startScene() {
   if (!canUseWebGL()) {
     app.classList.add("webgl-fallback");
     webglStatus.textContent = "WebGL is unavailable; showing accessible orbit navigation.";
+    finishStartupLoader();
     return;
   }
 
@@ -239,9 +263,12 @@ async function startScene() {
     sceneController.start();
     syncSceneToState();
     webglStatus.textContent = "";
+    window.requestAnimationFrame(() => finishStartupLoader());
+    window.setTimeout(() => finishStartupLoader(), 180);
   } catch (error) {
     app.classList.add("webgl-fallback");
     webglStatus.textContent = "The 3D scene could not start; showing accessible orbit navigation.";
+    finishStartupLoader();
     console.error(error);
   }
 }

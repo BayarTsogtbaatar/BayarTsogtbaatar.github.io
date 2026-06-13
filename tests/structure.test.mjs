@@ -127,10 +127,30 @@ test("index contains the Vite app shell", () => {
   assert.ok(html.includes('rel="icon"'));
 });
 
+test("index includes an accessible startup loader before the scene paints", () => {
+  const html = readFileSync("index.html", "utf8");
+  assert.ok(html.includes('class="app-shell is-loading-scene"'));
+  assert.ok(html.includes('aria-busy="true"'));
+  assert.ok(html.includes('id="app-loader"'));
+  assert.ok(html.includes('class="app-loader"'));
+  assert.ok(html.includes('role="status"'));
+  assert.ok(html.includes('class="loader-ring"'));
+});
+
+test("index ships critical loader CSS before body content", () => {
+  const html = readFileSync("index.html", "utf8");
+  const criticalCssIndex = html.indexOf('id="critical-loader-style"');
+  assert.ok(criticalCssIndex > -1);
+  assert.ok(criticalCssIndex < html.indexOf("<body>"));
+  assert.ok(html.includes(".app-shell.is-loading-scene .app-loader"));
+  assert.ok(html.includes(".app-loader[hidden]"));
+});
+
 test("CSS contains required visual, fallback, and responsive selectors", () => {
   const css = readFileSync("src/styles.css", "utf8");
   for (const selector of [
     ".app-shell",
+    ".app-loader",
     ".singularity-stage",
     "#singularity-canvas",
     ".orbit-node-button",
@@ -141,6 +161,19 @@ test("CSS contains required visual, fallback, and responsive selectors", () => {
     "@media (max-width: 760px)"
   ]) {
     assert.ok(css.includes(selector), `Missing selector ${selector}`);
+  }
+});
+
+test("startup loader fades cleanly without fighting reduced motion", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  for (const fragment of [
+    ".app-shell.is-scene-ready .app-loader",
+    ".app-shell.is-scene-ready #singularity-canvas",
+    "transition: opacity 700ms var(--ease), visibility 700ms var(--ease);",
+    "@keyframes loader-ring-sweep",
+    ".loader-ring::before"
+  ]) {
+    assert.ok(css.includes(fragment), `Missing startup loader CSS fragment ${fragment}`);
   }
 });
 
@@ -608,4 +641,21 @@ test("main app lazy-loads the heavy Three.js scene module", () => {
   assert.ok(source.includes('import("./scene.js")'));
   assert.ok(source.includes("root: document.documentElement"));
   assert.equal(source.includes('from "./scene.js"'), false);
+});
+
+test("main app keeps the startup loader until scene startup or fallback completes", () => {
+  const source = readFileSync("src/main.js", "utf8");
+  for (const fragment of [
+    'const appLoader = document.getElementById("app-loader")',
+    "const LOADER_EXIT_MS",
+    "function finishStartupLoader()",
+    'app.classList.remove("is-loading-scene")',
+    'app.classList.add("is-scene-ready")',
+    'app.setAttribute("aria-busy", "false")',
+    "window.requestAnimationFrame(() => finishStartupLoader())",
+    "window.setTimeout(() => finishStartupLoader(), 180)",
+    "finishStartupLoader();"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing startup loader main.js fragment ${fragment}`);
+  }
 });

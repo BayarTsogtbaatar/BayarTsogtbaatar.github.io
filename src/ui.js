@@ -12,8 +12,6 @@ export function renderProfile(profile) {
   <p class="profile-location">${escapeHtml(profile.location)}</p>
   <h1>${escapeHtml(profile.name)}</h1>
   <p class="profile-headline">${escapeHtml(profile.headline)}</p>
-  <p class="profile-about">${escapeHtml(profile.about)}</p>
-  <ul class="profile-skills">${profile.topSkills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join("")}</ul>
 </section>`;
 }
 

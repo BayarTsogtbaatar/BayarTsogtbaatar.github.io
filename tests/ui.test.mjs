@@ -17,7 +17,11 @@ test("renderProfile includes hero copy", () => {
   const html = renderProfile(PROFILE);
   assert.ok(html.includes("Bayar T."));
   assert.ok(html.includes("Cloud App Dev @ AWS | 9x AWS Certified"));
-  assert.ok(html.includes("I love solving problems."));
+  assert.equal(html.includes("I love solving problems."), false);
+  assert.equal(html.includes("profile-about"), false);
+  assert.equal(html.includes("profile-skills"), false);
+  assert.equal(html.includes("Hermes"), false);
+  assert.equal(html.includes("OpenClaw"), false);
 });
 
 test("renderOrbitControls creates one accessible button per section", () => {
