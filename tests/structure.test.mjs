@@ -4,7 +4,10 @@ import test from "node:test";
 import {
   NODE_LAYOUT,
   PACKAGE_VERSIONS,
+  PARTICLE_BUDGETS,
+  POST_PROCESSING,
   PERFORMANCE_LIMITS,
+  SHADER_SETTINGS,
   TRANSITIONS
 } from "../src/scene-config.js";
 
@@ -33,6 +36,36 @@ test("performance limits cover low-end device tuning", () => {
   assert.equal(PERFORMANCE_LIMITS.maxPixelRatio, 2);
   assert.equal(PERFORMANCE_LIMITS.desktopStars, 1200);
   assert.equal(PERFORMANCE_LIMITS.mobileStars, 520);
+});
+
+test("post-processing config defines composer passes and responsive bloom", () => {
+  assert.deepEqual(POST_PROCESSING.passes, [
+    "EffectComposer",
+    "RenderPass",
+    "UnrealBloomPass",
+    "ShaderPass",
+    "OutputPass"
+  ]);
+  assert.ok(POST_PROCESSING.bloom.desktop.strength > POST_PROCESSING.bloom.mobile.strength);
+  assert.ok(POST_PROCESSING.bloom.desktop.radius > POST_PROCESSING.bloom.mobile.radius);
+  assert.equal(POST_PROCESSING.bloom.reducedMotion.strength, 0);
+  assert.ok(POST_PROCESSING.composerScale.mobile < POST_PROCESSING.composerScale.desktop);
+});
+
+test("shader settings cover singularity, accretion disk, and particles", () => {
+  assert.ok(SHADER_SETTINGS.eventHorizon.uniforms.includes("uPhotonRing"));
+  assert.ok(SHADER_SETTINGS.eventHorizon.uniforms.includes("uLensing"));
+  assert.ok(SHADER_SETTINGS.accretionDisk.uniforms.includes("uDopplerBias"));
+  assert.ok(SHADER_SETTINGS.accretionDisk.uniforms.includes("uTurbulence"));
+  assert.ok(SHADER_SETTINGS.orbitalParticles.uniforms.includes("uContactBoost"));
+  assert.ok(SHADER_SETTINGS.orbitalParticles.additive);
+});
+
+test("particle budgets scale down on mobile and reduced motion", () => {
+  assert.ok(PARTICLE_BUDGETS.starfield.desktop > PARTICLE_BUDGETS.starfield.mobile);
+  assert.ok(PARTICLE_BUDGETS.accretionDust.desktop > PARTICLE_BUDGETS.accretionDust.mobile);
+  assert.ok(PARTICLE_BUDGETS.sectionBurst.desktop > PARTICLE_BUDGETS.sectionBurst.mobile);
+  assert.ok(PARTICLE_BUDGETS.reducedMotionMultiplier < 1);
 });
 
 test("transition config includes Igloo-inspired effects", () => {
@@ -89,6 +122,24 @@ test("scene animation loop uses current Three.js timer API", () => {
   const source = readFileSync("src/scene.js", "utf8");
   assert.ok(source.includes("new THREE.Timer()"));
   assert.equal(source.includes("new THREE.Clock()"), false);
+});
+
+test("scene module imports post-processing passes and uses custom shader materials", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    'three/addons/postprocessing/EffectComposer.js',
+    'three/addons/postprocessing/RenderPass.js',
+    'three/addons/postprocessing/UnrealBloomPass.js',
+    'three/addons/postprocessing/ShaderPass.js',
+    'three/addons/postprocessing/OutputPass.js',
+    "new THREE.ShaderMaterial",
+    "lensing",
+    "photon",
+    "doppler",
+    "burstParticles"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing scene fragment ${fragment}`);
+  }
 });
 
 test("main app imports styles, content, state, and UI modules", () => {

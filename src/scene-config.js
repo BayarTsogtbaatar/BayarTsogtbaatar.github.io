@@ -28,6 +28,73 @@ export const PERFORMANCE_LIMITS = {
   mobileBreakpoint: 760
 };
 
+export const POST_PROCESSING = {
+  passes: ["EffectComposer", "RenderPass", "UnrealBloomPass", "ShaderPass", "OutputPass"],
+  composerScale: {
+    desktop: 1,
+    mobile: 0.72,
+    reducedMotion: 0.62
+  },
+  bloom: {
+    desktop: {
+      strength: 0.78,
+      radius: 0.46,
+      threshold: 0.22
+    },
+    mobile: {
+      strength: 0.42,
+      radius: 0.24,
+      threshold: 0.34
+    },
+    reducedMotion: {
+      strength: 0,
+      radius: 0,
+      threshold: 1
+    }
+  },
+  shaderPass: {
+    aberration: 0.0018,
+    diveAberration: 0.007,
+    contactAberration: 0.0034,
+    lensDistortion: 0.08,
+    vignette: 0.62,
+    grain: 0.04
+  }
+};
+
+export const SHADER_SETTINGS = {
+  eventHorizon: {
+    uniforms: ["uTime", "uPhotonRing", "uLensing", "uInnerVoid"]
+  },
+  accretionDisk: {
+    uniforms: ["uTime", "uDopplerBias", "uTurbulence", "uInnerColor", "uOuterColor"]
+  },
+  orbitalParticles: {
+    uniforms: ["uTime", "uPixelRatio", "uContactBoost", "uFade"],
+    additive: true
+  }
+};
+
+export const PARTICLE_BUDGETS = {
+  starfield: {
+    desktop: PERFORMANCE_LIMITS.desktopStars,
+    mobile: PERFORMANCE_LIMITS.mobileStars
+  },
+  accretionDust: {
+    desktop: 1500,
+    mobile: 520
+  },
+  sectionBurst: {
+    desktop: 360,
+    mobile: 140
+  },
+  contact: {
+    desktop: 680,
+    mobile: 240
+  },
+  reducedMotionMultiplier: 0.34
+};
+
 export const TRANSITIONS = {
   introMs: 2200,
   diveMs: 1400,
