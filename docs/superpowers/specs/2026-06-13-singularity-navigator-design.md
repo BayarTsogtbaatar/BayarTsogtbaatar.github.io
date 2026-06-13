@@ -1,0 +1,210 @@
+# Singularity Navigator Design
+
+## Goal
+
+Transform the current static resume site into a full-screen Three.js portfolio where a cinematic black-hole singularity is the primary navigation object. The site should feel inspired by the quiet, immersive quality of igloo.inc, but use a darker deep-space identity with a stronger "wow" factor.
+
+## Approved Direction
+
+Use the Interactive Singularity Navigator approach:
+
+- A full-screen 3D scene is the first and primary experience.
+- A black hole sits at the center with a bright accretion ring, starfield depth, subtle gravitational-lensing style distortion, and faint technical orbit lines.
+- Five orbiting nodes represent the main sections: Experience, Projects, Skills, Education, and Contact.
+- Selecting a node triggers a camera dive into that node. The selected node becomes the full section view.
+- A Back to orbit control returns to the singularity navigation state.
+
+## Visual Design
+
+The mood is dark cinematic space rather than pale laboratory visualization. The scene should use a near-black background, blue-white stars, electric cyan and violet highlights, and warm accretion-ring light around the singularity. The interface chrome should remain restrained so the 3D object carries the page.
+
+The design should retain a technical feel from the reference site through thin wireframe arcs, small orbital guide marks, and precise labels. It should not become a dense sci-fi dashboard. Text should be sparse on the orbit screen and more readable in focused section views.
+
+## Interaction Model
+
+The default state is Orbit:
+
+- The singularity rotates slowly.
+- The accretion disk flows continuously.
+- Orbiting nodes move around the singularity at different depths.
+- Mouse movement tilts the camera subtly.
+- Hovering or focusing a node increases its glow, slows its orbit, and reveals its label with a short section preview.
+- Keyboard users can tab through the same nodes.
+
+The selected state is Dive:
+
+- Clicking, pressing Enter, or pressing Space on a focused node starts a camera transition toward that node.
+- Nearby stars stretch briefly to create a warp effect.
+- The selected node expands into a full-screen section.
+- Non-selected nodes fade back.
+- The singularity remains visible as a dim background presence or edge glow.
+
+The section state is Focus:
+
+- The selected section is readable and navigable.
+- Back to orbit returns to the default navigation state.
+- Escape also returns to orbit.
+- Direct section navigation updates accessible state and does not trap keyboard focus.
+
+## Content
+
+Hero/profile copy should use verified profile facts from the user-supplied LinkedIn profile URL and public profile metadata:
+
+- LinkedIn URL: https://www.linkedin.com/in/bayar-t/
+- Public profile headline: Cloud App Dev @ AWS | 9x AWS Certified.
+- Current organization signal: Amazon Web Services.
+- Education signal: University of California, San Diego.
+- Location signal: Sacramento, California, United States.
+- About line: I love solving problems.
+- Profile links from LinkedIn: https://github.com/bayar-t, https://bayartsogtbaatar.github.io/, and https://huggingface.co/bayarr.
+- Top skills signal: Hermes, OpenClaw, HuggingFace, and Amazon Web Services.
+
+Experience uses the LinkedIn-exported entries as the source of truth:
+
+- Amazon Web Services, Cloud App Developer, Dec 2025 to Present. Highlight regional migration work: an externalized S3 Batch Operations manifest-planning pipeline that scales planning to 1.5T rows per migration using AWS Glue, PySpark, S3, chunked Parquet reads, spill thresholds, worker tuning, batching, and memory flushing. Also highlight long-running workflow work, SQS partial-batch failure handling, live replication monitoring, and control-plane workflow integration. Include the kiosk platform delivered across 7 packages with RBAC, device registration APIs, UI pages, Android WebView, Panther localization, and accessibility compliance.
+- Amazon Web Services, Associate Cloud App Developer, Nov 2022 to Nov 2025. Highlight work on scaling jam.aws.com for AWS re:Invent 2023, DAX caching for 5x read throughput, a Scheduled Jobs service, reusable SAM/Glue/Lambda migration framework saving 200+ developer hours, OpenSearch query migration removing 66% API calls, OpenAPI migration mapping 4x more routes, 90% API-layer deployment-time reduction, and Spring Boot Lambda-to-Fargate migration reducing costs by 70%. Also highlight OpenSearch governance for Verizon, the Netty HTTP proxy foundation, 20-90% cost savings across domains, M&E workflow pricing platform architecture, intern mentorship, and Skill Builder UI work with React, Cloudscape, GraphQL, supergraph, micro front ends, and TypeScript.
+- Virtusa, Software Engineer, Jan 2022 to Nov 2022. Contract to Fidelity Investments from Feb 2022 to Nov 2022. Highlight modernization of core applications, on-prem to AKS migration, dashboards, Db2 stored procedures on Mainframe, Spring MVC/Spring Boot, Tomcat, JUnit/Mockito, Cucumber, Jenkins, Docker, Kubernetes, Helm charts, UDeploy, Datadog, Splunk, Drools, and Azure Kubernetes Service.
+- Early Warning, Software Engineer, Oct 2020 to Nov 2021. Highlight Data Management platform work, data quality and analysis, leading 2 developers for data-compliance efforts, and Hive, Solr, HBase, Kafka, Hadoop, Spark, TestNG, Cucumber, JMeter, and Chef.
+- MOVA International (MOVA Globes), Intern, Aug 2018 to Nov 2018. Highlight CAD processes used to engrave custom logos and messages on products.
+
+Skills uses the LinkedIn-exported skill signals plus the current site skill list grouped into useful clusters:
+
+- Languages: Java, C/C++, Python, HTML, CSS, JavaScript, SQL, ARM, Haskell, R.
+- Tools and platforms: Git, GitLab, Docker, Angular, Gradle, Postman, Hermes, OpenClaw, HuggingFace.
+- APIs and cloud: REST API, SOAP API, AWS, Glue, PySpark, S3, DynamoDB, DAX, OpenSearch, Lambda, SAM, Fargate, CDK, Route53, CloudAuth, SigV4, Cognito.
+- Frontend and app platforms: React, Cloudscape, GraphQL, TypeScript, Kotlin, Android WebView, Meridian.
+- Testing and quality: Veracode, JMeter, Gatling.
+- Languages spoken: English.
+
+Education uses the current entries:
+
+- UC San Diego, B.S. in Mathematics - Computer Science, 2015 to 2020.
+- Inderkum High School, High School Diploma, Aug 2011 to May 2015.
+
+Certifications should highlight:
+
+- 9x AWS Certified.
+- AWS Certified Generative AI Developer - Professional, issued May 2026 and expires May 2029.
+- AWS Certified CloudOps Engineer - Associate, issued Jun 2026 and expires Jun 2029.
+- AWS Certified Data Engineer - Associate, visible in LinkedIn activity.
+- AWS Certified Solutions Architect - Associate, visible in LinkedIn activity.
+
+Projects v1 includes:
+
+- OpenSearch Traffic Gateway, Jan 2024 to Apr 2024. Highlight that the OpenSearch team open-sourced the code and used it in a workshop for 200+ developers. Describe Bayar's initial Netty HTTP proxy logic, chunked HTTP request aggregation, governance rules, bypass-key logic, rules engine contributions, Lucene query parsing, OpenSearch DateMathParser use, Helm chart, HPA autoscaling, Kubernetes deployment, and 20-90% production cost savings across customer domains. Link to https://github.com/opensearch-project/opensearch-traffic-gateway.
+- A* Path Finding, Apr 2020 to Jul 2020. Describe real-time rendering of A* shortest-path search through a grid.
+- Singularity Portfolio: the current interactive Three.js portfolio navigation system.
+
+Contact v1 includes:
+
+- LinkedIn link: https://www.linkedin.com/in/bayar-t/
+- GitHub profile link from LinkedIn: https://github.com/bayar-t
+- Hugging Face link from LinkedIn: https://huggingface.co/bayarr
+- Current website link from LinkedIn: https://bayartsogtbaatar.github.io/
+- GitHub Pages repository link: https://github.com/BayarTsogtbaatar/BayarTsogtbaatar.github.io
+- No fabricated email. Add email only after the user supplies an exact target.
+
+## Architecture
+
+Keep the site deployable as a static GitHub Pages project, but implement it as a Vite-powered frontend so the Three.js/GSAP workflow can match the Igloo-style browser iteration model. Vite is used for local development, dependency management, module bundling, and production builds. The production output must remain static and suitable for GitHub Pages, deployed through a GitHub Actions Pages workflow that builds and publishes `dist/`.
+
+- `index.html` contains the Vite mount point and metadata.
+- `src/main.js` owns app bootstrap.
+- `src/content.js` contains profile, section, project, skill, certification, and contact data.
+- `src/state.js` contains orbit, dive, focus, and return state transitions.
+- `src/ui.js` renders accessible HTML controls and section panels.
+- `src/scene.js` owns Three.js scene setup, animation, input coordination, and WebGL fallback behavior.
+- `src/scene-config.js` contains animation constants, node layout, color tokens, particle budgets, and package-version assumptions.
+- `src/styles.css` contains layout, typography, responsive states, reduced-motion styles, and section overlays.
+- `.github/workflows/pages.yml` builds the Vite app and deploys the `dist/` artifact to GitHub Pages on pushes to `main`.
+
+Use the relevant Igloo-inspired programming stack: Three.js, GSAP, Vite, and vanilla JavaScript. Use `three-mesh-bvh` only if raycasting or spatial queries become a real performance issue during implementation; simple orbit node picking does not need it in V1. Do not introduce Svelte unless the UI layer becomes complex enough to justify component compilation; the approved V1 can remain lean with vanilla modules.
+
+Houdini, Blender, Figma, Photoshop, Affinity Photo, and Davinci Resolve are treated as reference production tools from the Igloo case study, not required project dependencies. V1 should use procedural browser-rendered geometry, shaders, CSS, and generated in-code textures unless the user supplies external assets from those tools.
+
+Borrow these Igloo process cues:
+
+- Build and tune effects directly in the browser.
+- Include a short real-time intro animation that flows into the orbit state.
+- Use chromatic aberration, technical displacement, and gravitational warp during node dive transitions.
+- Add an interactive particle treatment in the Contact/links section, where particles swirl and respond to selected external links.
+- Keep initial load and low-end device performance explicit through particle caps, renderer pixel-ratio caps, progressive initialization, and reduced-motion fallbacks.
+
+The JavaScript should be organized into clear units:
+
+- Content data for nodes and section copy.
+- Scene creation for renderer, camera, lights, singularity, stars, orbit lines, and nodes.
+- Interaction controller for pointer, keyboard, hover, focus, selection, and back navigation.
+- Transition controller for orbit, dive, focus, and return states.
+- Accessibility and fallback helpers.
+
+## Data Flow
+
+Section content should be represented as structured JavaScript data. The orbit nodes are derived from that data so labels, section ids, keyboard controls, and detail views stay in sync.
+
+The app state should have a small explicit state machine:
+
+- `orbit`: all nodes available, no active section.
+- `dive`: transition in progress for one node.
+- `focus`: one active section is open.
+- `returning`: transition back to orbit.
+
+State changes update:
+
+- The Three.js camera target and node emphasis.
+- The visible HTML section.
+- ARIA state for selected nodes and active content.
+- URL hash when entering a focused section, so direct links to sections can work.
+
+## Responsive Behavior
+
+Desktop should prioritize cinematic depth and mouse interaction. Mobile should keep the same concept but reduce motion and complexity:
+
+- Nodes orbit at a slower mobile speed and use larger tap targets.
+- Labels must remain readable without hover.
+- Section content should use a single-column layout.
+- The Back to orbit control must remain reachable.
+- The 3D scene should cap pixel ratio and particle count for performance.
+
+## Accessibility And Fallbacks
+
+The site must remain usable without WebGL:
+
+- Show a high-quality static space background using CSS gradients or a lightweight canvas fallback.
+- Render the same five sections as accessible HTML navigation.
+- Keep all resume content available.
+
+Respect `prefers-reduced-motion`:
+
+- Disable camera dives and star streaks.
+- Use short fades instead of large motion.
+- Keep the singularity either static or very slow.
+
+Keyboard support:
+
+- Tab reaches all nodes and the Back to orbit control.
+- Enter and Space select the focused node.
+- Escape returns from a focused section to orbit.
+
+## Testing And Verification
+
+Implementation is complete only when these checks pass:
+
+- The site loads locally without console errors.
+- The Three.js canvas renders a nonblank singularity scene on desktop.
+- All five nodes are visible, selectable, and keyboard accessible.
+- Selecting each node performs a transition and reveals the correct section content.
+- Back to orbit and Escape return to the orbit state.
+- Reduced-motion mode still exposes the full site without large camera movement.
+- WebGL fallback still exposes all sections.
+- Desktop and mobile viewport checks show no clipped primary text or unusable controls.
+
+## Non-Goals For V1
+
+- No backend.
+- No CMS.
+- No fabricated contact information.
+- No React.
+- No Svelte unless the UI layer becomes complex enough to justify component compilation.
+- No required Houdini, Blender, Figma, Photoshop, Affinity Photo, or Davinci Resolve asset pipeline for V1.
+- No large marketing page below the 3D experience.
