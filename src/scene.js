@@ -275,6 +275,10 @@ const cinematicPostShader = {
     uHorizonCenter: { value: new THREE.Vector2(0.5, 0.5) },
     uHorizonRadius: { value: 0.1 },
     uHorizonShadow: { value: 0.24 },
+    uSceneTransition: { value: 0 },
+    uTransitionCenter: { value: new THREE.Vector2(0.5, 0.5) },
+    uTransitionSeed: { value: 1 },
+    uTransitionDisplacement: { value: POST_PROCESSING.shaderPass.transitionDisplacement },
     uAspect: { value: 1 }
   },
   vertexShader: `
@@ -296,6 +300,10 @@ const cinematicPostShader = {
     uniform vec2 uHorizonCenter;
     uniform float uHorizonRadius;
     uniform float uHorizonShadow;
+    uniform float uSceneTransition;
+    uniform vec2 uTransitionCenter;
+    uniform float uTransitionSeed;
+    uniform float uTransitionDisplacement;
     uniform float uAspect;
 
     varying vec2 vUv;
@@ -307,8 +315,17 @@ const cinematicPostShader = {
     void main() {
       vec2 centered = vUv - vec2(0.5);
       float radius = dot(centered, centered);
-      vec2 lensUv = vUv + centered * radius * uLens;
-      vec2 direction = normalize(centered + vec2(0.0001)) * uAberration;
+      float transitionProgress = clamp(uSceneTransition, 0.0, 1.35);
+      float transitionActive = smoothstep(0.001, 0.04, transitionProgress) * (1.0 - smoothstep(1.18, 1.35, transitionProgress));
+      vec2 transitionDelta = (vUv - uTransitionCenter) * vec2(uAspect, 1.0);
+      float transitionDistance = length(transitionDelta);
+      float transitionWidth = 0.035 + transitionProgress * 0.045;
+      float transitionRing = exp(-pow((transitionDistance - transitionProgress * 0.96) / transitionWidth, 2.0)) * transitionActive;
+      float frostNoise = random(floor(vUv * uResolution.xy * 0.035 + uTransitionSeed));
+      vec2 transitionDirection = normalize(transitionDelta + vec2(0.0001));
+      float techDisplacement = transitionRing * uTransitionDisplacement * (0.62 + frostNoise * 0.76);
+      vec2 lensUv = vUv + centered * radius * uLens + transitionDirection * techDisplacement;
+      vec2 direction = normalize(centered + vec2(0.0001)) * (uAberration + transitionRing * 0.0036);
       float red = texture2D(tDiffuse, lensUv + direction).r;
       float green = texture2D(tDiffuse, lensUv).g;
       float blue = texture2D(tDiffuse, lensUv - direction).b;
@@ -318,6 +335,8 @@ const cinematicPostShader = {
       float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
       float grainMask = smoothstep(0.06, 0.78, luminance);
       color = color * mix(1.0, vignette, uVignette) + grainNoise * grainMask;
+      vec3 transitionTint = mix(vec3(1.0, 0.68, 0.32), vec3(0.72, 0.86, 1.0), frostNoise);
+      color = mix(color, transitionTint, transitionRing * (0.12 + frostNoise * 0.08));
       vec2 horizonDelta = (vUv - uHorizonCenter) * vec2(uAspect, 1.0);
       float horizonDistance = length(horizonDelta);
       float horizonInner = uHorizonRadius * 0.24;
@@ -799,6 +818,7 @@ export function createSingularityScene({
   let rafId = 0;
   let lastElapsed = 0;
   const horizonWorldCenter = new THREE.Vector3();
+  const transitionProjection = new THREE.Vector3();
   let currentHorizonMask = null;
   const deviceTilt = {
     active: false,
@@ -1157,6 +1177,39 @@ export function createSingularityScene({
     singularity.rotation.z = SINGULARITY_VIEW_TILT.z - deviceTilt.x * 0.01;
   }
 
+  function setSceneTransitionOrigin(origin) {
+    if (!origin) {
+      cinematicPass.uniforms.uTransitionCenter.value.set(0.5, 0.5);
+      return;
+    }
+
+    camera.updateMatrixWorld();
+    transitionProjection.copy(origin).project(camera);
+    cinematicPass.uniforms.uTransitionCenter.value.set(
+      clamp(transitionProjection.x * 0.5 + 0.5, 0.08, 0.92),
+      clamp(transitionProjection.y * 0.5 + 0.5, 0.08, 0.92)
+    );
+  }
+
+  function pulseSceneTransition({ origin = horizonWorldCenter } = {}) {
+    cinematicPass.uniforms.uSceneTransition.value = 0;
+
+    if (reducedMotion) return;
+
+    setSceneTransitionOrigin(origin);
+    cinematicPass.uniforms.uTransitionSeed.value = Math.random() * 1000;
+    gsap.killTweensOf(cinematicPass.uniforms.uSceneTransition);
+    cinematicPass.uniforms.uSceneTransition.value = 0.001;
+    gsap.to(cinematicPass.uniforms.uSceneTransition, {
+      value: 1.34,
+      duration: 0.86,
+      ease: "power2.out",
+      onComplete: () => {
+        cinematicPass.uniforms.uSceneTransition.value = 0;
+      }
+    });
+  }
+
   function renderFrame(timestamp) {
     if (!running) return;
     rafId = window.requestAnimationFrame(renderFrame);
@@ -1232,6 +1285,7 @@ export function createSingularityScene({
     triggerBurst(id);
     const node = nodeMeshes.get(id);
     const target = node ? node.position : new THREE.Vector3();
+    pulseSceneTransition({ origin: target });
 
     gsap.to(cinematicPass.uniforms.uAberration, {
       value: reducedMotion ? 0 : POST_PROCESSING.shaderPass.diveAberration,
@@ -1341,6 +1395,7 @@ export function createSingularityScene({
     gsap.killTweensOf(camera.position);
     gsap.killTweensOf(camera.rotation);
     gsap.killTweensOf(singularity.rotation);
+    gsap.killTweensOf(cinematicPass.uniforms.uSceneTransition);
     timer.dispose();
     composer.dispose();
     renderer.dispose();

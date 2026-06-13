@@ -106,7 +106,14 @@ test("particle budgets scale down on mobile and reduced motion", () => {
 test("transition config includes Igloo-inspired effects", () => {
   assert.ok(TRANSITIONS.introMs > 0);
   assert.ok(TRANSITIONS.diveMs > 0);
-  assert.deepEqual(TRANSITIONS.effects, ["chromatic-aberration", "tech-displacement", "gravitational-warp"]);
+  assert.deepEqual(TRANSITIONS.effects, [
+    "chromatic-aberration",
+    "tech-displacement",
+    "gravitational-warp",
+    "frost-dissolve"
+  ]);
+  assert.ok(POST_PROCESSING.shaderPass.transitionDisplacement > 0);
+  assert.ok(POST_PROCESSING.shaderPass.transitionDisplacement <= 0.02);
 });
 
 test("package json uses Vite, Three.js, and GSAP", () => {
@@ -135,6 +142,7 @@ test("index includes an accessible startup loader before the scene paints", () =
   assert.ok(html.includes('class="app-loader"'));
   assert.ok(html.includes('role="status"'));
   assert.ok(html.includes('class="loader-ring"'));
+  assert.ok(html.includes('class="loader-stream"'));
 });
 
 test("index includes a mobile opt-in phone tilt control", () => {
@@ -194,7 +202,10 @@ test("startup loader fades cleanly without fighting reduced motion", () => {
     ".app-shell.is-scene-ready #singularity-canvas",
     "transition: opacity 700ms var(--ease), visibility 700ms var(--ease);",
     "@keyframes loader-ring-sweep",
-    ".loader-ring::before"
+    ".loader-ring::before",
+    ".loader-stream",
+    ".loader-stream span",
+    "@keyframes loader-stream-shift"
   ]) {
     assert.ok(css.includes(fragment), `Missing startup loader CSS fragment ${fragment}`);
   }
@@ -456,6 +467,25 @@ test("scene module imports post-processing passes and uses custom shader materia
   ]) {
     assert.ok(source.includes(fragment), `Missing scene fragment ${fragment}`);
   }
+});
+
+test("post-processing transition uses shader displacement instead of CSS overlays", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  const css = readFileSync("src/styles.css", "utf8");
+  for (const fragment of [
+    "uSceneTransition",
+    "uTransitionCenter",
+    "uTransitionSeed",
+    "transitionRing",
+    "techDisplacement",
+    "frostNoise",
+    "function pulseSceneTransition",
+    "pulseSceneTransition({ origin: target })"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing shader transition fragment ${fragment}`);
+  }
+  assert.equal(source.includes("pulseSceneTransition({ origin: horizonWorldCenter })"), false);
+  assert.equal(css.includes(".scene-transition-overlay"), false);
 });
 
 test("event horizon visibility comes from the shader, not a top-level black overlay", () => {

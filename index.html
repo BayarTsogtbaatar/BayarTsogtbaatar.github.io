@@ -86,9 +86,36 @@
         letter-spacing: 0;
       }
 
+      .loader-stream {
+        position: relative;
+        display: flex;
+        gap: 0.55rem;
+        color: rgba(255, 215, 155, 0.58);
+        font: 700 0.72rem/1 IBMPlexMono-Medium, ui-monospace, monospace;
+        letter-spacing: 0;
+        overflow: hidden;
+      }
+
+      .loader-stream span {
+        animation: loader-stream-shift 1200ms steps(4, end) infinite;
+      }
+
       @keyframes loader-ring-sweep {
         to {
           transform: rotate(360deg);
+        }
+      }
+
+      @keyframes loader-stream-shift {
+        50% {
+          opacity: 0.42;
+          transform: translateY(-1px);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .loader-stream span {
+          animation: none;
         }
       }
     </style>
@@ -102,6 +129,11 @@
           <span class="loader-core"></span>
         </div>
         <p class="loader-kicker">Initializing singularity</p>
+        <div class="loader-stream" aria-hidden="true">
+          <span>+==----==</span>
+          <span>--==++==</span>
+          <span>==--==++</span>
+        </div>
       </div>
       <button
         id="tilt-toggle"

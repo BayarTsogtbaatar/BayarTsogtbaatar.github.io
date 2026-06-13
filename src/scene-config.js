@@ -56,6 +56,7 @@ export const POST_PROCESSING = {
     aberration: 0.0009,
     diveAberration: 0.007,
     contactAberration: 0.0034,
+    transitionDisplacement: 0.012,
     lensDistortion: 0.048,
     vignette: 0.72,
     grain: 0.01
@@ -99,5 +100,5 @@ export const TRANSITIONS = {
   introMs: 2200,
   diveMs: 1400,
   returnMs: 900,
-  effects: ["chromatic-aberration", "tech-displacement", "gravitational-warp"]
+  effects: ["chromatic-aberration", "tech-displacement", "gravitational-warp", "frost-dissolve"]
 };
