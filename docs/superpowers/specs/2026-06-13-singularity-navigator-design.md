@@ -51,39 +51,56 @@ The section state is Focus:
 Hero/profile copy should use verified profile facts from the user-supplied LinkedIn profile URL and public profile metadata:
 
 - LinkedIn URL: https://www.linkedin.com/in/bayar-t/
-- Public profile headline: Cloud App Dev @ AWS | 8x AWS Certified.
+- Public profile headline: Cloud App Dev @ AWS | 9x AWS Certified.
 - Current organization signal: Amazon Web Services.
 - Education signal: University of California, San Diego.
 - Location signal: Sacramento, California, United States.
+- About line: I love solving problems.
+- Profile links from LinkedIn: https://github.com/bayar-t, https://bayartsogtbaatar.github.io/, and https://huggingface.co/bayarr.
+- Top skills signal: Hermes, OpenClaw, HuggingFace, and Amazon Web Services.
 
-Experience uses the current resume entries:
+Experience uses the LinkedIn-exported entries as the source of truth:
 
-- Amazon Web Services, Associate Cloud App Developer, Nov 2022 to Present.
-- Virtusa contract to Fidelity Investments, Software Engineer, Jan 2022 to Nov 2022.
-- Infosys contract to Zelle, Software Engineer, Oct 2020 to Nov 2021.
-- Mova Globes, Intern, Aug 2018 to Oct 2018.
+- Amazon Web Services, Cloud App Developer, Dec 2025 to Present. Highlight regional migration work: an externalized S3 Batch Operations manifest-planning pipeline that scales planning to 1.5T rows per migration using AWS Glue, PySpark, S3, chunked Parquet reads, spill thresholds, worker tuning, batching, and memory flushing. Also highlight long-running workflow work, SQS partial-batch failure handling, live replication monitoring, and control-plane workflow integration. Include the kiosk platform delivered across 7 packages with RBAC, device registration APIs, UI pages, Android WebView, Panther localization, and accessibility compliance.
+- Amazon Web Services, Associate Cloud App Developer, Nov 2022 to Nov 2025. Highlight work on scaling jam.aws.com for AWS re:Invent 2023, DAX caching for 5x read throughput, a Scheduled Jobs service, reusable SAM/Glue/Lambda migration framework saving 200+ developer hours, OpenSearch query migration removing 66% API calls, OpenAPI migration mapping 4x more routes, 90% API-layer deployment-time reduction, and Spring Boot Lambda-to-Fargate migration reducing costs by 70%. Also highlight OpenSearch governance for Verizon, the Netty HTTP proxy foundation, 20-90% cost savings across domains, M&E workflow pricing platform architecture, intern mentorship, and Skill Builder UI work with React, Cloudscape, GraphQL, supergraph, micro front ends, and TypeScript.
+- Virtusa, Software Engineer, Jan 2022 to Nov 2022. Contract to Fidelity Investments from Feb 2022 to Nov 2022. Highlight modernization of core applications, on-prem to AKS migration, dashboards, Db2 stored procedures on Mainframe, Spring MVC/Spring Boot, Tomcat, JUnit/Mockito, Cucumber, Jenkins, Docker, Kubernetes, Helm charts, UDeploy, Datadog, Splunk, Drools, and Azure Kubernetes Service.
+- Early Warning, Software Engineer, Oct 2020 to Nov 2021. Highlight Data Management platform work, data quality and analysis, leading 2 developers for data-compliance efforts, and Hive, Solr, HBase, Kafka, Hadoop, Spark, TestNG, Cucumber, JMeter, and Chef.
+- MOVA International (MOVA Globes), Intern, Aug 2018 to Nov 2018. Highlight CAD processes used to engrave custom logos and messages on products.
 
-Skills uses the current skill list grouped into useful clusters:
+Skills uses the LinkedIn-exported skill signals plus the current site skill list grouped into useful clusters:
 
 - Languages: Java, C/C++, Python, HTML, CSS, JavaScript, SQL, ARM, Haskell, R.
-- Tools and platforms: Git, GitLab, Docker, Angular, Gradle, Postman.
-- APIs and cloud: REST API, SOAP API, AWS.
+- Tools and platforms: Git, GitLab, Docker, Angular, Gradle, Postman, Hermes, OpenClaw, HuggingFace.
+- APIs and cloud: REST API, SOAP API, AWS, Glue, PySpark, S3, DynamoDB, DAX, OpenSearch, Lambda, SAM, Fargate, CDK, Route53, CloudAuth, SigV4, Cognito.
+- Frontend and app platforms: React, Cloudscape, GraphQL, TypeScript, Kotlin, Android WebView, Meridian.
 - Testing and quality: Veracode, JMeter, Gatling.
 - Languages spoken: English.
 
 Education uses the current entries:
 
-- UC San Diego, B.S. in Mathematics - Computer Science, Aug 2015 to June 2020.
-- Inderkum High School, Aug 2011 to May 2015.
+- UC San Diego, B.S. in Mathematics - Computer Science, 2015 to 2020.
+- Inderkum High School, High School Diploma, Aug 2011 to May 2015.
 
-Projects v1 includes one polished project entry for this portfolio rebuild:
+Certifications should highlight:
 
-- Singularity Portfolio: an interactive Three.js portfolio navigation system for Bayar Tsogtbaatar.
+- 9x AWS Certified.
+- AWS Certified Generative AI Developer - Professional, issued May 2026 and expires May 2029.
+- AWS Certified CloudOps Engineer - Associate, issued Jun 2026 and expires Jun 2029.
+- AWS Certified Data Engineer - Associate, visible in LinkedIn activity.
+- AWS Certified Solutions Architect - Associate, visible in LinkedIn activity.
+
+Projects v1 includes:
+
+- OpenSearch Traffic Gateway, Jan 2024 to Apr 2024. Highlight that the OpenSearch team open-sourced the code and used it in a workshop for 200+ developers. Describe Bayar's initial Netty HTTP proxy logic, chunked HTTP request aggregation, governance rules, bypass-key logic, rules engine contributions, Lucene query parsing, OpenSearch DateMathParser use, Helm chart, HPA autoscaling, Kubernetes deployment, and 20-90% production cost savings across customer domains. Link to https://github.com/opensearch-project/opensearch-traffic-gateway.
+- A* Path Finding, Apr 2020 to Jul 2020. Describe real-time rendering of A* shortest-path search through a grid.
+- Singularity Portfolio: the current interactive Three.js portfolio navigation system.
 
 Contact v1 includes:
 
 - LinkedIn link: https://www.linkedin.com/in/bayar-t/
-- GitHub link: https://github.com/BayarTsogtbaatar
+- GitHub profile link from LinkedIn: https://github.com/bayar-t
+- Hugging Face link from LinkedIn: https://huggingface.co/bayarr
+- Current website link from LinkedIn: https://bayartsogtbaatar.github.io/
 - GitHub Pages repository link: https://github.com/BayarTsogtbaatar/BayarTsogtbaatar.github.io
 - No fabricated email. Add email only after the user supplies an exact target.
 
