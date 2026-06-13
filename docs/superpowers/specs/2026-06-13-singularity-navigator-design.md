@@ -106,13 +106,29 @@ Contact v1 includes:
 
 ## Architecture
 
-Keep the site deployable as a static GitHub Pages project. Preserve the current broad file structure unless implementation proves it needs more separation:
+Keep the site deployable as a static GitHub Pages project, but implement it as a Vite-powered frontend so the Three.js/GSAP workflow can match the Igloo-style browser iteration model. Vite is used for local development, dependency management, module bundling, and production builds. The production output must remain static and suitable for GitHub Pages, deployed through a GitHub Actions Pages workflow that builds and publishes `dist/`.
 
-- `index.html` contains semantic fallback content, the WebGL mount, and accessible controls.
-- `assets/css/styles.css` contains layout, typography, responsive states, reduced-motion styles, and section overlays.
-- `assets/js/main.js` owns app state, Three.js scene setup, animation, input handling, section transitions, and fallback behavior.
+- `index.html` contains the Vite mount point and metadata.
+- `src/main.js` owns app bootstrap.
+- `src/content.js` contains profile, section, project, skill, certification, and contact data.
+- `src/state.js` contains orbit, dive, focus, and return state transitions.
+- `src/ui.js` renders accessible HTML controls and section panels.
+- `src/scene.js` owns Three.js scene setup, animation, input coordination, and WebGL fallback behavior.
+- `src/scene-config.js` contains animation constants, node layout, color tokens, particle budgets, and package-version assumptions.
+- `src/styles.css` contains layout, typography, responsive states, reduced-motion styles, and section overlays.
+- `.github/workflows/pages.yml` builds the Vite app and deploys the `dist/` artifact to GitHub Pages on pushes to `main`.
 
-Use Three.js for the 3D scene. V1 loads Three.js from a CDN using ES modules to keep the static GitHub Pages setup simple. Vendor the library locally in `assets/vendor/` only if CDN loading fails during verification.
+Use the relevant Igloo-inspired programming stack: Three.js, GSAP, Vite, and vanilla JavaScript. Use `three-mesh-bvh` only if raycasting or spatial queries become a real performance issue during implementation; simple orbit node picking does not need it in V1. Do not introduce Svelte unless the UI layer becomes complex enough to justify component compilation; the approved V1 can remain lean with vanilla modules.
+
+Houdini, Blender, Figma, Photoshop, Affinity Photo, and Davinci Resolve are treated as reference production tools from the Igloo case study, not required project dependencies. V1 should use procedural browser-rendered geometry, shaders, CSS, and generated in-code textures unless the user supplies external assets from those tools.
+
+Borrow these Igloo process cues:
+
+- Build and tune effects directly in the browser.
+- Include a short real-time intro animation that flows into the orbit state.
+- Use chromatic aberration, technical displacement, and gravitational warp during node dive transitions.
+- Add an interactive particle treatment in the Contact/links section, where particles swirl and respond to selected external links.
+- Keep initial load and low-end device performance explicit through particle caps, renderer pixel-ratio caps, progressive initialization, and reduced-motion fallbacks.
 
 The JavaScript should be organized into clear units:
 
@@ -188,5 +204,7 @@ Implementation is complete only when these checks pass:
 - No backend.
 - No CMS.
 - No fabricated contact information.
-- No unrelated rewrite to React or Vite unless implementation shows the static setup blocks the approved interaction.
+- No React.
+- No Svelte unless the UI layer becomes complex enough to justify component compilation.
+- No required Houdini, Blender, Figma, Photoshop, Affinity Photo, or Davinci Resolve asset pipeline for V1.
 - No large marketing page below the 3D experience.
