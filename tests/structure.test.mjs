@@ -137,6 +137,15 @@ test("index includes an accessible startup loader before the scene paints", () =
   assert.ok(html.includes('class="loader-ring"'));
 });
 
+test("index includes a mobile opt-in phone tilt control", () => {
+  const html = readFileSync("index.html", "utf8");
+  assert.ok(html.includes('id="tilt-toggle"'));
+  assert.ok(html.includes('class="tilt-toggle"'));
+  assert.ok(html.includes('aria-pressed="false"'));
+  assert.ok(html.includes('aria-label="Enable phone tilt motion"'));
+  assert.ok(html.includes('class="tilt-state"'));
+});
+
 test("index ships critical loader CSS before body content", () => {
   const html = readFileSync("index.html", "utf8");
   const criticalCssIndex = html.indexOf('id="critical-loader-style"');
@@ -151,6 +160,7 @@ test("CSS contains required visual, fallback, and responsive selectors", () => {
   for (const selector of [
     ".app-shell",
     ".app-loader",
+    ".tilt-toggle",
     ".singularity-stage",
     "#singularity-canvas",
     ".orbit-node-button",
@@ -161,6 +171,20 @@ test("CSS contains required visual, fallback, and responsive selectors", () => {
     "@media (max-width: 760px)"
   ]) {
     assert.ok(css.includes(selector), `Missing selector ${selector}`);
+  }
+});
+
+test("phone tilt control is mobile-only and reduced-motion aware", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  for (const fragment of [
+    ".tilt-toggle",
+    ".tilt-toggle[aria-pressed=\"true\"]",
+    ".tilt-glyph",
+    ".tilt-state",
+    "@media (max-width: 760px)",
+    "@media (prefers-reduced-motion: reduce)"
+  ]) {
+    assert.ok(css.includes(fragment), `Missing phone tilt CSS fragment ${fragment}`);
   }
 });
 
@@ -618,6 +642,20 @@ test("scene keeps HTML labels on stable anchors and tracks nodes with connector 
   assert.ok(source.includes("--connector-y"));
 });
 
+test("scene exposes a smoothed device tilt hook without replacing pointer raycasting", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "const deviceTilt = {",
+    "function setDeviceTilt",
+    "function updateDeviceTiltParallax",
+    "deviceTilt.active",
+    "setDeviceTilt,",
+    "raycaster.setFromCamera(pointer, camera)"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing device tilt scene fragment ${fragment}`);
+  }
+});
+
 test("portfolio orbit guides stay subdued behind the cinematic singularity", () => {
   const source = readFileSync("src/scene.js", "utf8");
   assert.ok(source.includes("opacity: 0.055"));
@@ -641,6 +679,21 @@ test("main app lazy-loads the heavy Three.js scene module", () => {
   assert.ok(source.includes('import("./scene.js")'));
   assert.ok(source.includes("root: document.documentElement"));
   assert.equal(source.includes('from "./scene.js"'), false);
+});
+
+test("main app wires phone tilt behind a mobile permission toggle", () => {
+  const source = readFileSync("src/main.js", "utf8");
+  for (const fragment of [
+    'import { createDeviceTiltController } from "./motion.js"',
+    'const tiltToggle = document.getElementById("tilt-toggle")',
+    "function syncTiltToggle()",
+    "async function toggleDeviceTilt()",
+    "function bindTiltControl()",
+    'tiltToggle.addEventListener("click", toggleDeviceTilt)',
+    "sceneController?.setDeviceTilt"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing phone tilt main.js fragment ${fragment}`);
+  }
 });
 
 test("main app keeps the startup loader until scene startup or fallback completes", () => {

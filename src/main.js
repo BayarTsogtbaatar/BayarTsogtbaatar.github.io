@@ -1,5 +1,6 @@
 import "./styles.css";
 import { PROFILE, getSectionById, sections } from "./content.js";
+import { createDeviceTiltController } from "./motion.js";
 import {
   completeDive,
   completeReturn,
@@ -18,6 +19,7 @@ const sectionPanels = document.getElementById("section-panels");
 const app = document.getElementById("app");
 const appLoader = document.getElementById("app-loader");
 const canvas = document.getElementById("singularity-canvas");
+const tiltToggle = document.getElementById("tilt-toggle");
 const webglStatus = document.getElementById("webgl-status");
 
 const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -27,6 +29,8 @@ const loaderStartedAt = window.performance.now();
 let state = createInitialState({ reducedMotion: motionQuery.matches });
 let sceneController = null;
 let sceneModulePromise = null;
+let tiltController = null;
+let tiltUnavailable = false;
 let transitionTimer = 0;
 let loaderFinishing = false;
 
@@ -55,6 +59,84 @@ function clearTransitionTimer() {
     window.clearTimeout(transitionTimer);
     transitionTimer = 0;
   }
+}
+
+function syncTiltToggle() {
+  if (!tiltToggle) return;
+
+  const active = Boolean(tiltController?.active);
+  const stateLabel = tiltUnavailable ? "N/A" : active ? "On" : "Off";
+  const state = tiltToggle.querySelector(".tilt-state");
+
+  tiltToggle.hidden = motionQuery.matches;
+  tiltToggle.disabled = tiltUnavailable || motionQuery.matches;
+  tiltToggle.classList.toggle("is-active", active);
+  tiltToggle.setAttribute("aria-pressed", active ? "true" : "false");
+  tiltToggle.setAttribute(
+    "aria-label",
+    active ? "Disable phone tilt motion" : "Enable phone tilt motion"
+  );
+
+  if (state) {
+    state.textContent = stateLabel;
+  }
+}
+
+function ensureTiltController() {
+  if (!tiltController) {
+    tiltController = createDeviceTiltController({
+      globalScope: window,
+      onTilt: (tilt) => {
+        sceneController?.setDeviceTilt({ ...tilt, active: true });
+      }
+    });
+  }
+
+  return tiltController;
+}
+
+function stopDeviceTilt() {
+  tiltController?.stop();
+  sceneController?.setDeviceTilt({ x: 0, y: 0, active: false });
+  syncTiltToggle();
+}
+
+async function toggleDeviceTilt() {
+  if (!tiltToggle || tiltUnavailable || motionQuery.matches) return;
+
+  const controller = ensureTiltController();
+
+  if (controller.active) {
+    stopDeviceTilt();
+    return;
+  }
+
+  const enabled = await controller.start();
+
+  if (enabled) {
+    sceneController?.setDeviceTilt({ active: true });
+  } else {
+    tiltUnavailable = true;
+    sceneController?.setDeviceTilt({ x: 0, y: 0, active: false });
+  }
+
+  syncTiltToggle();
+}
+
+function bindTiltControl() {
+  if (!tiltToggle) return;
+
+  tiltUnavailable = !createDeviceTiltController.isSupported(window);
+  syncTiltToggle();
+  tiltToggle.addEventListener("click", toggleDeviceTilt);
+
+  motionQuery.addEventListener?.("change", () => {
+    if (motionQuery.matches) {
+      stopDeviceTilt();
+    } else {
+      syncTiltToggle();
+    }
+  });
 }
 
 function finishStartupLoader() {
@@ -262,6 +344,9 @@ async function startScene() {
     });
     sceneController.start();
     syncSceneToState();
+    if (tiltController?.active) {
+      sceneController.setDeviceTilt({ active: true });
+    }
     webglStatus.textContent = "";
     window.requestAnimationFrame(() => finishStartupLoader());
     window.setTimeout(() => finishStartupLoader(), 180);
@@ -290,6 +375,7 @@ function openInitialHash() {
 function initApp() {
   renderApp();
   bindControls();
+  bindTiltControl();
   syncUi();
   startScene();
   openInitialHash();

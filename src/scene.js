@@ -800,6 +800,13 @@ export function createSingularityScene({
   let lastElapsed = 0;
   const horizonWorldCenter = new THREE.Vector3();
   let currentHorizonMask = null;
+  const deviceTilt = {
+    active: false,
+    x: 0,
+    y: 0,
+    targetX: 0,
+    targetY: 0
+  };
 
   sections.forEach((section) => {
     const button = root.querySelector?.(`[data-section-id="${section.id}"]`);
@@ -1103,6 +1110,53 @@ export function createSingularityScene({
     contactParticles.rotation.y = elapsed * 0.25;
   }
 
+  function setDeviceTilt({
+    x = deviceTilt.targetX,
+    y = deviceTilt.targetY,
+    active = deviceTilt.active
+  } = {}) {
+    const wasActive = deviceTilt.active;
+    deviceTilt.active = Boolean(active);
+
+    if (Number.isFinite(x)) {
+      deviceTilt.targetX = clamp(x, -1, 1);
+    }
+
+    if (Number.isFinite(y)) {
+      deviceTilt.targetY = clamp(y, -1, 1);
+    }
+
+    if (!deviceTilt.active) {
+      deviceTilt.targetX = 0;
+      deviceTilt.targetY = 0;
+    }
+
+    if (deviceTilt.active && !wasActive) {
+      gsap.killTweensOf(camera.rotation);
+      gsap.killTweensOf(singularity.rotation);
+    }
+  }
+
+  function updateDeviceTiltParallax() {
+    if (reducedMotion) return;
+
+    const targetX = deviceTilt.active && !activeSectionId ? deviceTilt.targetX : 0;
+    const targetY = deviceTilt.active && !activeSectionId ? deviceTilt.targetY : 0;
+    deviceTilt.x += (targetX - deviceTilt.x) * 0.08;
+    deviceTilt.y += (targetY - deviceTilt.y) * 0.08;
+
+    if (!deviceTilt.active && Math.abs(deviceTilt.x) < 0.001 && Math.abs(deviceTilt.y) < 0.001) {
+      deviceTilt.x = 0;
+      deviceTilt.y = 0;
+      return;
+    }
+
+    camera.rotation.x = deviceTilt.y * 0.038;
+    camera.rotation.y = -deviceTilt.x * 0.052;
+    singularity.rotation.x = SINGULARITY_VIEW_TILT.x + deviceTilt.y * 0.018;
+    singularity.rotation.z = SINGULARITY_VIEW_TILT.z - deviceTilt.x * 0.01;
+  }
+
   function renderFrame(timestamp) {
     if (!running) return;
     rafId = window.requestAnimationFrame(renderFrame);
@@ -1116,6 +1170,7 @@ export function createSingularityScene({
     starField.rotation.y = elapsed * (reducedMotion ? 0.0015 : 0.009);
     starField.rotation.x = Math.sin(elapsed * 0.08) * 0.02;
 
+    updateDeviceTiltParallax();
     updateHorizonMaskUniforms();
     updateShaderUniforms(elapsed);
     updateNodeMeshes(elapsed);
@@ -1224,7 +1279,7 @@ export function createSingularityScene({
     hoveredId = visibleHit?.object?.userData?.sectionId ?? null;
     canvas.style.cursor = hoveredId ? "pointer" : "default";
 
-    if (!reducedMotion && !activeSectionId) {
+    if (!deviceTilt.active && !reducedMotion && !activeSectionId) {
       gsap.to(camera.rotation, {
         x: pointer.y * 0.045,
         y: -pointer.x * 0.06,
@@ -1304,6 +1359,7 @@ export function createSingularityScene({
     stop,
     resize,
     setHoveredSection,
+    setDeviceTilt,
     selectSection,
     focusSection,
     returnToOrbit,

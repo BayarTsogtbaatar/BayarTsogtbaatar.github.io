@@ -357,6 +357,96 @@ html.is-distorting .orbit-node-button {
   display: none;
 }
 
+.tilt-toggle {
+  position: fixed;
+  right: calc(env(safe-area-inset-right, 0px) + 0.85rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.85rem);
+  z-index: 7;
+  display: none;
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    "glyph label"
+    "glyph state";
+  align-items: center;
+  gap: 0 0.5rem;
+  min-width: 5.9rem;
+  min-height: 3rem;
+  border: 1px solid rgba(255, 179, 91, 0.32);
+  border-radius: 0.5rem;
+  padding: 0.44rem 0.62rem;
+  color: var(--text);
+  background: rgba(3, 7, 16, 0.74);
+  box-shadow: 0 0.7rem 2.4rem rgba(0, 0, 0, 0.38), 0 0 1.4rem rgba(255, 158, 68, 0.12);
+  backdrop-filter: blur(14px);
+  cursor: pointer;
+  transition: border-color 220ms var(--ease), background 220ms var(--ease), opacity 220ms var(--ease);
+}
+
+.tilt-toggle[hidden] {
+  display: none !important;
+}
+
+.tilt-toggle[aria-pressed="true"] {
+  border-color: rgba(255, 213, 143, 0.72);
+  background: rgba(36, 18, 8, 0.78);
+  box-shadow: 0 0.8rem 2.8rem rgba(0, 0, 0, 0.42), 0 0 1.8rem rgba(255, 158, 68, 0.22);
+}
+
+.tilt-toggle:disabled {
+  cursor: default;
+  opacity: 0.46;
+}
+
+.tilt-glyph {
+  grid-area: glyph;
+  position: relative;
+  display: block;
+  width: 1.55rem;
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 222, 170, 0.42);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 179, 91, 0.25), transparent 64%);
+}
+
+.tilt-glyph::before {
+  content: "";
+  position: absolute;
+  left: 0.28rem;
+  right: 0.28rem;
+  top: 50%;
+  height: 1px;
+  transform: rotate(-18deg);
+  background: rgba(255, 230, 190, 0.84);
+  box-shadow: 0 0 0.5rem rgba(255, 179, 91, 0.48);
+}
+
+.tilt-glyph-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.36rem;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(255, 236, 204, 0.94);
+  box-shadow: 0 0 0.7rem rgba(255, 179, 91, 0.72);
+}
+
+.tilt-label {
+  grid-area: label;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.tilt-state {
+  grid-area: state;
+  color: rgba(247, 251, 255, 0.62);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .section-panels {
   position: fixed;
   inset: 0;
@@ -513,6 +603,10 @@ html.contact-field-active .contact-particle-field {
     margin-top: 0.95rem;
   }
 
+  .tilt-toggle {
+    display: grid;
+  }
+
   .orbit-node-button {
     position: absolute;
     left: 50%;
@@ -550,6 +644,10 @@ html.contact-field-active .contact-particle-field {
 
   .loader-ring {
     animation: none;
+  }
+
+  .tilt-toggle {
+    display: none !important;
   }
 
 }
