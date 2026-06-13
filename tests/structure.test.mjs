@@ -88,7 +88,9 @@ test("shader settings cover singularity, accretion disk, and particles", () => {
   assert.ok(SHADER_SETTINGS.eventHorizon.uniforms.includes("uLensing"));
   assert.ok(SHADER_SETTINGS.accretionDisk.uniforms.includes("uDopplerBias"));
   assert.ok(SHADER_SETTINGS.accretionDisk.uniforms.includes("uTurbulence"));
-  assert.ok(SHADER_SETTINGS.orbitalParticles.uniforms.includes("uContactBoost"));
+  for (const uniform of ["uContactBoost", "uHorizonCenter", "uHorizonRadius", "uHorizonDepth", "uHorizonOccluderDepth"]) {
+    assert.ok(SHADER_SETTINGS.orbitalParticles.uniforms.includes(uniform));
+  }
   assert.ok(SHADER_SETTINGS.orbitalParticles.additive);
 });
 
@@ -144,9 +146,22 @@ test("CSS contains required visual, fallback, and responsive selectors", () => {
 
 test("orbit node cards stay visually lighter than the singularity", () => {
   const css = readFileSync("src/styles.css", "utf8");
-  assert.ok(css.includes("background: rgba(3, 8, 20, 0.46);"));
-  assert.ok(css.includes("backdrop-filter: blur(10px);"));
-  assert.ok(css.includes("box-shadow: 0 0 1.6rem rgba(120, 215, 255, 0.08);"));
+  assert.ok(css.includes("background: rgba(2, 5, 13, 0.42);"));
+  assert.ok(css.includes("backdrop-filter: blur(8px);"));
+  assert.ok(css.includes("box-shadow: 0 0 1.3rem rgba(255, 158, 68, 0.07);"));
+  assert.ok(css.includes("background: rgba(255, 185, 96, 0.84);"));
+});
+
+test("hero title stack keeps the name, headline, and tags separated", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  const normalizedCss = css.replaceAll("\r\n", "\n");
+  assert.ok(css.includes("font-size: 7.25rem;"));
+  assert.ok(css.includes("line-height: 0.95;"));
+  assert.ok(normalizedCss.includes(".profile-headline {\n  margin-top: 0.95rem;"));
+  assert.ok(css.includes("line-height: 1.18;"));
+  assert.ok(css.includes("@media (max-width: 1100px)"));
+  assert.ok(css.includes("font-size: 5.8rem;"));
+  assert.ok(css.includes("font-size: 3.35rem;"));
 });
 
 test("mobile orbit stack is placed below the hero copy with compact spacing", () => {
@@ -182,6 +197,7 @@ test("scene helper projects the horizon mask from camera math", async () => {
   assert.ok(baseline.center.x > 0.45 && baseline.center.x < 0.55);
   assert.ok(baseline.center.y > 0.3 && baseline.center.y < 0.5);
   assert.ok(baseline.radius > 0.04 && baseline.radius < 0.18);
+  assert.ok(baseline.occluderDepth < baseline.depth);
 
   camera.position.y = 0;
   camera.updateMatrixWorld();
@@ -193,6 +209,123 @@ test("scene helper projects the horizon mask from camera math", async () => {
     height: 720
   });
   assert.notEqual(shifted.center.y, baseline.center.y);
+});
+
+test("scene helper hides projected nodes only when they are behind the event horizon", async () => {
+  const { computeNodeHorizonOcclusion } = await import("../src/scene.js");
+  const horizonMask = {
+    center: { x: 0.5, y: 0.5 },
+    radius: 0.12,
+    aspect: 16 / 9,
+    depth: 0.5
+  };
+
+  const hidden = computeNodeHorizonOcclusion({
+    projectedNode: { x: 0, y: 0, z: 0.58 },
+    horizonMask
+  });
+  assert.ok(hidden.behindHorizon);
+  assert.ok(hidden.insideHorizon);
+  assert.ok(hidden.occlusion >= 0.98);
+  assert.ok(hidden.visibility <= 0.02);
+
+  const foregroundInside = computeNodeHorizonOcclusion({
+    projectedNode: { x: 0, y: 0, z: 0.42 },
+    horizonMask
+  });
+  assert.equal(foregroundInside.behindHorizon, false);
+  assert.ok(foregroundInside.insideHorizon);
+  assert.equal(foregroundInside.occlusion, 0);
+  assert.equal(foregroundInside.visibility, 1);
+
+  const foregroundOutside = computeNodeHorizonOcclusion({
+    projectedNode: { x: 0.4, y: 0, z: 0.42 },
+    horizonMask
+  });
+  assert.equal(foregroundOutside.behindHorizon, false);
+  assert.equal(foregroundOutside.insideHorizon, false);
+  assert.equal(foregroundOutside.visibility, 1);
+
+  const offDisk = computeNodeHorizonOcclusion({
+    projectedNode: { x: 0.82, y: 0, z: 0.72 },
+    horizonMask
+  });
+  assert.equal(offDisk.insideHorizon, false);
+  assert.equal(offDisk.visibility, 1);
+});
+
+test("scene helper uses shader UV y-space for off-center horizon occlusion", async () => {
+  const { computeNodeHorizonOcclusion } = await import("../src/scene.js");
+  const horizonMask = {
+    center: { x: 0.5, y: 0.38 },
+    radius: 0.1,
+    aspect: 16 / 9,
+    depth: 0.5
+  };
+
+  const hiddenAtShaderCenter = computeNodeHorizonOcclusion({
+    projectedNode: { x: 0, y: -0.24, z: 0.58 },
+    horizonMask
+  });
+  assert.ok(hiddenAtShaderCenter.insideHorizon);
+  assert.ok(hiddenAtShaderCenter.visibility <= 0.02);
+
+  const mirroredScreenPoint = computeNodeHorizonOcclusion({
+    projectedNode: { x: 0, y: 0.24, z: 0.58 },
+    horizonMask
+  });
+  assert.equal(mirroredScreenPoint.insideHorizon, false);
+  assert.equal(mirroredScreenPoint.visibility, 1);
+});
+
+test("scene helper compares objects against the near horizon surface depth", async () => {
+  const { computeNodeHorizonOcclusion } = await import("../src/scene.js");
+  const horizonMask = {
+    center: { x: 0.5, y: 0.5 },
+    radius: 0.12,
+    aspect: 16 / 9,
+    depth: 0.5,
+    occluderDepth: 0.36
+  };
+
+  const betweenNearSurfaceAndCenter = computeNodeHorizonOcclusion({
+    projectedNode: { x: 0, y: 0, z: 0.42 },
+    horizonMask
+  });
+  assert.ok(betweenNearSurfaceAndCenter.behindHorizon);
+  assert.ok(betweenNearSurfaceAndCenter.visibility <= 0.02);
+
+  const inFrontOfNearSurface = computeNodeHorizonOcclusion({
+    projectedNode: { x: 0, y: 0, z: 0.32 },
+    horizonMask
+  });
+  assert.equal(inFrontOfNearSurface.behindHorizon, false);
+  assert.equal(inFrontOfNearSurface.visibility, 1);
+});
+
+test("scene helper occludes shallow disk-plane depth behind the near horizon", async () => {
+  const { computeNodeHorizonOcclusion } = await import("../src/scene.js");
+  const horizonMask = {
+    center: { x: 0.5, y: 0.5 },
+    radius: 0.12,
+    aspect: 16 / 9,
+    depth: 0.984,
+    occluderDepth: 0.9812
+  };
+
+  const diskPlanePoint = computeNodeHorizonOcclusion({
+    projectedNode: { x: 0, y: 0, z: 0.984 },
+    horizonMask
+  });
+  assert.ok(diskPlanePoint.behindHorizon);
+  assert.ok(diskPlanePoint.visibility <= 0.05);
+
+  const frontSkimmingPoint = computeNodeHorizonOcclusion({
+    projectedNode: { x: 0, y: 0, z: 0.9808 },
+    horizonMask
+  });
+  assert.equal(frontSkimmingPoint.behindHorizon, false);
+  assert.equal(frontSkimmingPoint.visibility, 1);
 });
 
 test("scene helper derives Schwarzschild black hole metrics", async () => {
@@ -260,12 +393,76 @@ test("scene module imports post-processing passes and uses custom shader materia
   }
 });
 
-test("event horizon core renders as an unobscured black layer", () => {
+test("event horizon visibility comes from the shader, not a top-level black overlay", () => {
   const source = readFileSync("src/scene.js", "utf8");
-  assert.ok(source.includes("transparent: true,"));
-  assert.ok(source.includes("horizonCore.renderOrder = 10"));
-  assert.ok(source.includes("horizonCore.material.depthTest = false"));
-  assert.ok(source.includes("horizonCore.material.depthWrite = false"));
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.equal(source.includes("const horizonCore"), false);
+  assert.equal(source.includes("horizonCore.renderOrder"), false);
+  assert.equal(source.includes("horizonCoreVisualRadius"), false);
+  assert.equal(css.includes(".singularity-stage::after"), false);
+  assert.ok(source.includes("singularity.getWorldPosition(horizonWorldCenter)"));
+  assert.ok(source.includes("radius: blackHoleMetrics.shadowRadius"));
+});
+
+test("scene uses an invisible depth-only horizon occluder for transparent sprites", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "function createDepthOnlyHorizonOccluder(radius)",
+    "colorWrite: false",
+    "depthWrite: true",
+    "depthTest: true",
+    "createDepthOnlyHorizonOccluder(blackHoleMetrics.shadowRadius * 0.92)",
+    "horizonDepthOccluder.renderOrder = 4",
+    "singularity.add(horizonDepthOccluder)"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing depth-only occluder fragment ${fragment}`);
+  }
+});
+
+test("scene applies projected horizon occlusion to orbit nodes and connector dots", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  const css = readFileSync("src/styles.css", "utf8");
+  for (const fragment of [
+    "computeNodeHorizonOcclusion({",
+    "projectedHorizonDepth",
+    "group.userData.horizonVisibility",
+    "button.style.setProperty(\"--connector-opacity\"",
+    "burstParticles.userData.horizonVisibility"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing node occlusion fragment ${fragment}`);
+  }
+  assert.ok(css.includes("opacity: var(--connector-opacity, 1);"));
+});
+
+test("particle shader masks point sprites against the projected event horizon", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "uniform vec2 uHorizonCenter;",
+    "uniform float uHorizonDepth;",
+    "uniform float uHorizonOccluderDepth;",
+    "vec2 particleUv = ndcPosition.xy * 0.5 + 0.5;",
+    "ndcPosition.z - uHorizonOccluderDepth",
+    "float hardHorizon = (1.0 - smoothstep(0.56, 0.72, normalizedHorizonDistance)) * behindHorizon;",
+    "float horizonOcclusion = clamp(max(hardHorizon, softHorizon), 0.0, 1.0);",
+    "vAlpha = uFade * (0.58 + twinkle * 0.42) * horizonVisibility;",
+    "points.material.uniforms.uHorizonCenter.value.copy(mask.center)",
+    "points.material.uniforms.uHorizonOccluderDepth.value = mask.occluderDepth",
+    "uHorizonDepth: { value: 0 }",
+    "uHorizonOccluderDepth: { value: 0 }",
+    "for (const points of [starField, accretionDust, burstParticles, contactParticles])"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing particle horizon mask fragment ${fragment}`);
+  }
+});
+
+test("scene avoids CSS horizon masks so the underlying black-hole shader remains visible", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.equal(source.includes("--horizon-x"), false);
+  assert.equal(source.includes("--horizon-shadow-radius"), false);
+  assert.equal(source.includes("--horizon-void-radius"), false);
+  assert.equal(css.includes("width: calc(var(--horizon-radius"), false);
+  assert.equal(css.includes("width: calc(var(--horizon-void-radius"), false);
 });
 
 test("singularity shader uses physics-derived lensing and disk math", () => {
@@ -332,12 +529,13 @@ test("singularity shader renders an absent center with lensed background light a
   const source = readFileSync("src/scene.js", "utf8");
   for (const fragment of [
     "hardVoid",
+    "deadCenterMask",
     "voidCutout",
     "lensedStarSmear",
     "duplicatedLightArc",
     "tidalFilaments",
     "approachingBoost",
-    "color = mix(color, vec3(0.0), hardVoid"
+    "color = mix(color, vec3(0.0), max(hardVoid, deadCenterMask))"
   ]) {
     assert.ok(source.includes(fragment), `Missing spacetime-wound shader fragment ${fragment}`);
   }

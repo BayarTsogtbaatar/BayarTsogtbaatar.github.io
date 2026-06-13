@@ -13,11 +13,11 @@ export const NODE_LAYOUT = [
 ];
 
 export const COLORS = {
-  void: "#03050d",
+  void: "#010107",
   eventHorizon: "#000000",
   accretionWarm: "#ff9e44",
-  accretionCool: "#7ed7ff",
-  orbitLine: "#6fb7ff",
+  accretionCool: "#7fb7ff",
+  orbitLine: "#9a7cff",
   text: "#f7fbff"
 };
 
@@ -37,14 +37,14 @@ export const POST_PROCESSING = {
   },
   bloom: {
     desktop: {
-      strength: 0.54,
-      radius: 0.28,
-      threshold: 0.5
+      strength: 0.44,
+      radius: 0.22,
+      threshold: 0.56
     },
     mobile: {
-      strength: 0.3,
-      radius: 0.18,
-      threshold: 0.52
+      strength: 0.24,
+      radius: 0.15,
+      threshold: 0.58
     },
     reducedMotion: {
       strength: 0,
@@ -53,12 +53,12 @@ export const POST_PROCESSING = {
     }
   },
   shaderPass: {
-    aberration: 0.0012,
+    aberration: 0.0009,
     diveAberration: 0.007,
     contactAberration: 0.0034,
-    lensDistortion: 0.052,
-    vignette: 0.62,
-    grain: 0.012
+    lensDistortion: 0.048,
+    vignette: 0.72,
+    grain: 0.01
   }
 };
 
@@ -70,7 +70,7 @@ export const SHADER_SETTINGS = {
     uniforms: ["uTime", "uDopplerBias", "uTurbulence", "uInnerColor", "uOuterColor"]
   },
   orbitalParticles: {
-    uniforms: ["uTime", "uPixelRatio", "uContactBoost", "uFade"],
+    uniforms: ["uTime", "uPixelRatio", "uContactBoost", "uFade", "uHorizonCenter", "uHorizonRadius", "uHorizonAspect", "uHorizonDepth", "uHorizonOccluderDepth"],
     additive: true
   }
 };

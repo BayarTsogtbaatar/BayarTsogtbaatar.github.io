@@ -93,8 +93,8 @@ const relativisticBlackHoleFragmentShader = `
     float filament = sin(azimuth * 28.0 + uTime * (2.0 + orbitSpeed * 4.0) + radius * 6.0) * 0.5 + 0.5;
     float tightFilament = smoothstep(0.52, 1.0, sin(azimuth * 58.0 - uTime * 0.75 + radius * 15.0) * 0.5 + 0.5);
     vec3 color = mix(uOuterColor, uInnerColor, clamp(temperature * 1.18 + turbulence * 0.22 + underside * 0.12, 0.0, 1.0));
-    color += vec3(1.0, 0.78, 0.28) * pow(temperature, 2.6) * (0.64 + doppler * 0.24);
-    float alpha = diskWindow(radius) * lensWeight * (0.24 + temperature * 0.66 + filament * 0.22 + tightFilament * 0.18 + turbulence * 0.1);
+    color += vec3(1.0, 0.86, 0.42) * pow(temperature, 2.85) * (0.72 + doppler * 0.32);
+    float alpha = diskWindow(radius) * lensWeight * (0.2 + temperature * 0.74 + filament * 0.22 + tightFilament * 0.2 + turbulence * 0.08);
     return vec4(color * gravitationalRedshift * doppler, alpha);
   }
 
@@ -105,8 +105,8 @@ const relativisticBlackHoleFragmentShader = `
     vec2 directDiskPoint = vec2(p.x, p.y / cosInclination);
     vec4 directDisk = diskEmission(directDiskPoint, 1.0, 0.0);
     float diskPlaneProfile = exp(-pow(p.y / (uEventHorizonRadius * 0.46), 2.0));
-    directDisk.a *= 0.16 + diskPlaneProfile * 0.84;
-    directDisk.rgb *= mix(vec3(1.0, 0.42, 0.14), vec3(1.0, 0.92, 0.68), diskPlaneProfile);
+    directDisk.a *= 0.14 + diskPlaneProfile * 0.98;
+    directDisk.rgb *= mix(vec3(1.0, 0.35, 0.09), vec3(1.0, 0.94, 0.72), diskPlaneProfile);
 
     float lensRing = exp(-pow((screenRadius - uShadowRadius * 1.06) / (uEventHorizonRadius * 0.32), 2.0));
     float farSideHump = exp(-pow((abs(p.y) - uShadowRadius * 0.62) / (uEventHorizonRadius * 0.52), 2.0));
@@ -136,8 +136,8 @@ const relativisticBlackHoleFragmentShader = `
     float archedUpperArc = exp(-pow((p.y - upperArcHeight) / (uEventHorizonRadius * 0.13), 2.0));
     archedUpperArc *= 1.0 - smoothstep(0.96, 1.08, upperArcSpan);
     archedUpperArc *= smoothstep(-uEventHorizonRadius * 0.1, uShadowRadius * 0.45, p.y);
-    float upperLensingArc = max(radialUpperArc * 0.64, archedUpperArc);
-    upperLensingArc *= 0.66 + 0.34 * smoothstep(0.34, 1.0, sin(azimuth * 54.0 + screenRadius * 8.0 - uTime * 0.7) * 0.5 + 0.5);
+    float upperLensingArc = max(radialUpperArc * 0.72, archedUpperArc * 1.18);
+    upperLensingArc *= 0.72 + 0.28 * smoothstep(0.34, 1.0, sin(azimuth * 54.0 + screenRadius * 8.0 - uTime * 0.7) * 0.5 + 0.5);
 
     float feedStreamMask = smoothstep(uEventHorizonRadius * 0.12, uShadowRadius * 1.5, p.y);
     feedStreamMask *= 1.0 - smoothstep(uDiskOuterRadius * 0.88, uDiskOuterRadius * 1.58, abs(p.x));
@@ -174,31 +174,38 @@ const relativisticBlackHoleFragmentShader = `
     float denseHorizonDust = exp(-pow((screenRadius - uShadowRadius * 1.08) / (uEventHorizonRadius * 0.38), 2.0));
     denseHorizonDust *= 0.54 + 0.46 * noise2(vec2(azimuth * 22.0 - uTime * 0.6, screenRadius * 8.0));
 
-    float photonWidth = max(0.025, uEventHorizonRadius * 0.08);
-    float photon = exp(-pow((screenRadius - uShadowRadius) / photonWidth, 2.0));
-    float sphereGlow = exp(-pow((screenRadius - uPhotonSphereRadius) / (uEventHorizonRadius * 0.5), 2.0)) * 0.16;
-    float shadow = 1.0 - smoothstep(uShadowRadius * 0.965, uShadowRadius * 1.035, screenRadius);
-    float shadowCutout = smoothstep(uShadowRadius * 0.42, uShadowRadius * 0.72, screenRadius);
-    float hardVoid = 1.0 - smoothstep(uShadowRadius * 0.48, uShadowRadius * 0.72, screenRadius);
-    float voidCutout = 1.0 - smoothstep(uShadowRadius * 0.72, uShadowRadius * 1.02, screenRadius);
+    float lensWarp = 1.0 + 0.025 * sin(azimuth * 2.0 - 0.35) + 0.014 * sin(azimuth * 5.0 + uTime * 0.08);
+    float warpedShadowRadius = uShadowRadius * lensWarp;
+    float photonWidth = max(0.018, uEventHorizonRadius * 0.045);
+    float photon = exp(-pow((screenRadius - warpedShadowRadius) / photonWidth, 2.0));
+    float sphereGlow = exp(-pow((screenRadius - uPhotonSphereRadius) / (uEventHorizonRadius * 0.5), 2.0)) * 0.1;
+    float shadow = 1.0 - smoothstep(warpedShadowRadius * 0.94, warpedShadowRadius * 1.035, screenRadius);
+    float shadowCutout = smoothstep(warpedShadowRadius * 0.56, warpedShadowRadius * 0.76, screenRadius);
+    float hardVoid = 1.0 - smoothstep(warpedShadowRadius * 0.58, warpedShadowRadius * 0.66, screenRadius);
+    float deadCenterMask = 1.0 - smoothstep(warpedShadowRadius * 0.72, warpedShadowRadius * 0.94, screenRadius);
+    float voidCutout = 1.0 - smoothstep(warpedShadowRadius * 0.62, warpedShadowRadius * 0.94, screenRadius);
+    float nearEdgeSkim = exp(-pow((screenRadius - warpedShadowRadius * 0.72) / (uEventHorizonRadius * 0.09), 2.0));
+    nearEdgeSkim *= equatorialBeam * (0.55 + approachingBoost * 0.74);
+    nearEdgeSkim *= smoothstep(warpedShadowRadius * 0.58, warpedShadowRadius * 0.68, screenRadius);
 
-    vec3 photonColor = vec3(1.0, 0.62, 0.24) * photon * (1.0 + sin(uTime * 2.0) * 0.1);
-    vec3 lensColor = lensedDisk.rgb * lensedDisk.a * 0.92;
-    vec3 diskColor = directDisk.rgb * directDisk.a * (1.0 - shadow * 0.82) * 0.9;
+    vec3 photonColor = vec3(1.0, 0.78, 0.36) * photon * (1.42 + sin(uTime * 2.0) * 0.06);
+    vec3 lensColor = lensedDisk.rgb * lensedDisk.a * 1.02;
+    vec3 diskColor = directDisk.rgb * directDisk.a * (1.0 - shadow * 0.9) * 1.06;
     vec3 beamColor = vec3(1.0, 0.88, 0.34) * (equatorialBeam * 1.45 + beamCore * 0.78 + broadDiskGlow * 0.72) * beamFilaments * shadowCutout;
     beamColor *= 0.68 + beamDoppler * 0.16 + approachingBoost * 0.42;
-    vec3 upperArcColor = vec3(1.0, 0.62, 0.3) * upperLensingArc * 1.9;
-    vec3 starSmearColor = mix(vec3(0.38, 0.7, 1.0), vec3(1.0, 0.66, 0.92), smoothstep(-0.4, 0.8, sin(azimuth * 3.0))) * lensedStarSmear * 0.72;
-    vec3 rimColor = mix(vec3(0.14, 0.5, 1.0), vec3(1.0, 0.28, 0.78), smoothstep(-0.45, 0.7, sin(azimuth * 2.0 - uTime * 0.35))) * rimChroma * 1.02;
+    vec3 upperArcColor = vec3(1.0, 0.66, 0.28) * upperLensingArc * 2.32;
+    vec3 starSmearColor = mix(vec3(1.0, 0.82, 0.5), vec3(1.0, 0.42, 0.18), smoothstep(-0.4, 0.8, sin(azimuth * 3.0))) * lensedStarSmear * 0.48;
+    vec3 rimColor = mix(vec3(1.0, 0.7, 0.3), vec3(1.0, 0.36, 0.12), smoothstep(-0.45, 0.7, sin(azimuth * 2.0 - uTime * 0.35))) * rimChroma * 0.9;
     vec3 tailColor = vec3(1.0, 0.12, 0.03) * plasmaTail * 1.35 + vec3(1.0, 0.5, 0.12) * plasmaTail * equatorialBeam * 1.7;
     vec3 tidalColor = vec3(1.0, 0.78, 0.36) * tidalFilaments * (0.58 + approachingBoost * 0.56);
     vec3 upperFeedColor = (vec3(1.0, 0.7, 0.28) * topFeedStream * 3.25 + vec3(1.0, 0.22, 0.06) * topFeedStream * denseHorizonDust * 2.1) * shadowCutout;
-    vec3 color = tailColor + diskColor + lensColor + beamColor + upperArcColor + upperFeedColor + starSmearColor + photonColor + rimColor + tidalColor + vec3(0.36, 0.62, 1.0) * sphereGlow;
-    float shadowObscuration = clamp(shadow * 0.98 * (1.0 - lensedDisk.a * 0.62 - equatorialBeam * 0.38 - rimChroma * 0.24), 0.0, 1.0);
+    vec3 nearEdgeSkimColor = vec3(1.0, 0.62, 0.18) * nearEdgeSkim * 1.7;
+    vec3 color = tailColor + diskColor + lensColor + beamColor + upperArcColor + upperFeedColor + starSmearColor + photonColor + rimColor + tidalColor + nearEdgeSkimColor + vec3(1.0, 0.58, 0.22) * sphereGlow;
+    float shadowObscuration = clamp(shadow * 0.9 * (1.0 - lensedDisk.a * 0.48 - equatorialBeam * 0.34 - rimChroma * 0.2 - nearEdgeSkim * 0.62), 0.0, 1.0);
     color = mix(color, vec3(0.0), shadowObscuration);
-    color = mix(color, vec3(0.0), hardVoid);
+    color = mix(color, vec3(0.0), max(hardVoid, deadCenterMask));
     float alpha = max(max(directDisk.a, lensedDisk.a), max(photon * 0.9, shadow * 0.98));
-    alpha = max(alpha, max(voidCutout * 0.98, max(max(equatorialBeam * shadowCutout, broadDiskGlow * 0.46), max(upperLensingArc * 0.86, max(topFeedStream * 0.94, max(denseHorizonDust * 0.36, max(plasmaTail * 0.62, max(lensedStarSmear * 0.54, tidalFilaments * 0.48))))))));
+    alpha = max(alpha, max(voidCutout, max(max(equatorialBeam * shadowCutout, broadDiskGlow * 0.46), max(upperLensingArc * 0.92, max(topFeedStream * 0.94, max(denseHorizonDust * 0.36, max(plasmaTail * 0.62, max(lensedStarSmear * 0.42, max(tidalFilaments * 0.48, nearEdgeSkim * 0.72)))))))));
     gl_FragColor = vec4(color, alpha * uOpacity);
   }
 `;
@@ -212,6 +219,11 @@ const particleVertexShader = `
   uniform float uPixelRatio;
   uniform float uContactBoost;
   uniform float uFade;
+  uniform vec2 uHorizonCenter;
+  uniform float uHorizonRadius;
+  uniform float uHorizonAspect;
+  uniform float uHorizonDepth;
+  uniform float uHorizonOccluderDepth;
 
   varying vec3 vColor;
   varying float vAlpha;
@@ -220,10 +232,20 @@ const particleVertexShader = `
     vColor = aColor;
     float twinkle = sin(uTime * (0.8 + aSeed * 0.32) + aSeed * 12.0) * 0.5 + 0.5;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    vec4 clipPosition = projectionMatrix * mvPosition;
+    vec3 ndcPosition = clipPosition.xyz / clipPosition.w;
+    vec2 particleUv = ndcPosition.xy * 0.5 + 0.5;
+    vec2 horizonDelta = (particleUv - uHorizonCenter) * vec2(uHorizonAspect, 1.0);
+    float normalizedHorizonDistance = length(horizonDelta) / max(0.001, uHorizonRadius);
+    float behindHorizon = smoothstep(0.00012, 0.0024, ndcPosition.z - uHorizonOccluderDepth);
+    float hardHorizon = (1.0 - smoothstep(0.56, 0.72, normalizedHorizonDistance)) * behindHorizon;
+    float softHorizon = (1.0 - smoothstep(0.72, 1.08, normalizedHorizonDistance)) * behindHorizon;
+    float horizonOcclusion = clamp(max(hardHorizon, softHorizon), 0.0, 1.0);
+    float horizonVisibility = 1.0 - horizonOcclusion;
     float depthScale = 92.0 / max(14.0, -mvPosition.z);
     gl_PointSize = clamp(aSize * uPixelRatio * depthScale * (0.82 + twinkle * 0.28 + uContactBoost * 0.28), 0.7, 9.0);
-    vAlpha = uFade * (0.58 + twinkle * 0.42);
-    gl_Position = projectionMatrix * mvPosition;
+    vAlpha = uFade * (0.58 + twinkle * 0.42) * horizonVisibility;
+    gl_Position = clipPosition;
   }
 `;
 
@@ -252,7 +274,7 @@ const cinematicPostShader = {
     uLens: { value: POST_PROCESSING.shaderPass.lensDistortion },
     uHorizonCenter: { value: new THREE.Vector2(0.5, 0.5) },
     uHorizonRadius: { value: 0.1 },
-    uHorizonShadow: { value: 0.88 },
+    uHorizonShadow: { value: 0.24 },
     uAspect: { value: 1 }
   },
   vertexShader: `
@@ -298,8 +320,8 @@ const cinematicPostShader = {
       color = color * mix(1.0, vignette, uVignette) + grainNoise * grainMask;
       vec2 horizonDelta = (vUv - uHorizonCenter) * vec2(uAspect, 1.0);
       float horizonDistance = length(horizonDelta);
-      float horizonInner = uHorizonRadius * 0.55;
-      float horizonOuter = uHorizonRadius * 1.18;
+      float horizonInner = uHorizonRadius * 0.24;
+      float horizonOuter = uHorizonRadius * 0.5;
       float horizonShadow = (1.0 - smoothstep(horizonInner, horizonOuter, horizonDistance)) * uHorizonShadow;
       color *= 1.0 - horizonShadow;
       gl_FragColor = vec4(color, 1.0);
@@ -332,12 +354,54 @@ export function computeProjectedHorizonMask({ camera, center, radius, width, hei
   const aspect = safeWidth / safeHeight;
   const projectedCenter = center.clone().project(camera);
   const cameraRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+  const cameraForward = new THREE.Vector3();
+  camera.getWorldDirection(cameraForward);
   const projectedEdge = center.clone().addScaledVector(cameraRight, radius).project(camera);
+  const projectedOccluder = center.clone().addScaledVector(cameraForward, -radius).project(camera);
 
   return {
     center: new THREE.Vector2(projectedCenter.x * 0.5 + 0.5, projectedCenter.y * 0.5 + 0.5),
     radius: Math.max(0.012, Math.abs(projectedEdge.x - projectedCenter.x) * 0.5 * aspect),
-    aspect
+    aspect,
+    depth: projectedCenter.z,
+    occluderDepth: Math.min(projectedCenter.z, projectedOccluder.z)
+  };
+}
+
+function smoothstep(edge0, edge1, value) {
+  const t = clamp((value - edge0) / Math.max(0.000001, edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+export function computeNodeHorizonOcclusion({
+  projectedNode,
+  horizonMask,
+  projectedHorizonDepth = horizonMask?.occluderDepth ?? horizonMask?.depth ?? 0,
+  depthBias = 0.00012,
+  depthFeather = 0.00228,
+  innerRadius = 0.72,
+  outerRadius = 1.08
+}) {
+  const center = horizonMask?.center ?? { x: 0.5, y: 0.5 };
+  const safeRadius = Math.max(0.001, horizonMask?.radius ?? 0.001);
+  const aspect = horizonMask?.aspect ?? 1;
+  const nodeUvX = projectedNode.x * 0.5 + 0.5;
+  const nodeUvY = projectedNode.y * 0.5 + 0.5;
+  const dx = (nodeUvX - center.x) * aspect;
+  const dy = nodeUvY - center.y;
+  const normalizedDistance = Math.sqrt(dx * dx + dy * dy) / safeRadius;
+  const depthDelta = projectedNode.z - projectedHorizonDepth;
+  const behindFactor = smoothstep(depthBias, depthBias + depthFeather, depthDelta);
+  const horizonCoverage = 1 - smoothstep(innerRadius, outerRadius, normalizedDistance);
+  const hardHorizonCoverage = 1 - smoothstep(0.58, innerRadius, normalizedDistance);
+  const occlusion = clamp(Math.max(hardHorizonCoverage, horizonCoverage) * behindFactor, 0, 1);
+
+  return {
+    behindHorizon: depthDelta > depthBias,
+    insideHorizon: normalizedDistance <= outerRadius,
+    normalizedDistance,
+    occlusion,
+    visibility: clamp(1 - occlusion, 0, 1)
   };
 }
 
@@ -398,7 +462,12 @@ function createParticleMaterial({ opacity = 1 } = {}) {
       uTime: { value: 0 },
       uPixelRatio: { value: 1 },
       uContactBoost: { value: 0 },
-      uFade: { value: opacity }
+      uFade: { value: opacity },
+      uHorizonCenter: { value: new THREE.Vector2(0.5, 0.5) },
+      uHorizonRadius: { value: 0.1 },
+      uHorizonAspect: { value: 1 },
+      uHorizonDepth: { value: 0 },
+      uHorizonOccluderDepth: { value: 0 }
     },
     vertexShader: particleVertexShader,
     fragmentShader: particleFragmentShader,
@@ -407,6 +476,17 @@ function createParticleMaterial({ opacity = 1 } = {}) {
     depthTest: true,
     blending: THREE.AdditiveBlending
   });
+}
+
+function createDepthOnlyHorizonOccluder(radius) {
+  return new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 96, 48),
+    new THREE.MeshBasicMaterial({
+      colorWrite: false,
+      depthWrite: true,
+      depthTest: true
+    })
+  );
 }
 
 function createStarField({ count, spread }) {
@@ -575,7 +655,7 @@ function createRelativisticSingularity({ metrics, inclination, reducedMotion }) 
     })
   );
 
-  mesh.renderOrder = 12;
+  mesh.renderOrder = 6;
   return mesh;
 }
 
@@ -628,26 +708,31 @@ function createNodeGroup(layout) {
   group.userData.layout = layout;
 
   const core = new THREE.Mesh(
-    new THREE.SphereGeometry(0.13, 36, 18),
+    new THREE.SphereGeometry(0.095, 36, 18),
     new THREE.MeshBasicMaterial({
       color: layout.color,
       transparent: true,
-      opacity: 0.95,
-      blending: THREE.AdditiveBlending
+      opacity: 0.72,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      depthTest: true
     })
   );
   core.userData.sectionId = layout.id;
+  core.renderOrder = 8;
 
   const halo = new THREE.Mesh(
-    new THREE.SphereGeometry(0.28, 36, 18),
+    new THREE.SphereGeometry(0.21, 36, 18),
     new THREE.MeshBasicMaterial({
       color: layout.color,
       transparent: true,
-      opacity: 0.18,
+      opacity: 0.1,
       blending: THREE.AdditiveBlending,
-      depthWrite: false
+      depthWrite: false,
+      depthTest: true
     })
   );
+  halo.renderOrder = 7;
 
   group.add(core, halo);
   return { group, core, halo };
@@ -714,6 +799,7 @@ export function createSingularityScene({
   let rafId = 0;
   let lastElapsed = 0;
   const horizonWorldCenter = new THREE.Vector3();
+  let currentHorizonMask = null;
 
   sections.forEach((section) => {
     const button = root.querySelector?.(`[data-section-id="${section.id}"]`);
@@ -725,14 +811,14 @@ export function createSingularityScene({
   const starField = createStarField({ count: getBudget("starfield", reducedMotion), spread: 64 });
   scene.add(starField);
 
-  const ambient = new THREE.AmbientLight(0x6b7dff, 0.36);
+  const ambient = new THREE.AmbientLight(0x5b4868, 0.24);
   scene.add(ambient);
 
-  const warmLight = new THREE.PointLight(0xffa75a, 4.4, 16);
+  const warmLight = new THREE.PointLight(0xffa75a, 5.2, 16);
   warmLight.position.set(-1.4, 0.4, 2.2);
   scene.add(warmLight);
 
-  const coolLight = new THREE.PointLight(0x76d8ff, 1.8, 18);
+  const coolLight = new THREE.PointLight(0x7c8cff, 0.65, 18);
   coolLight.position.set(2.4, 1.7, -1.2);
   scene.add(coolLight);
 
@@ -746,18 +832,10 @@ export function createSingularityScene({
   });
   const diskInclination = DISK_VIEW_INCLINATION;
 
-  const horizonCore = new THREE.Mesh(
-    new THREE.SphereGeometry(blackHoleMetrics.shadowRadius, 128, 64),
-    new THREE.MeshBasicMaterial({
-      color: COLORS.eventHorizon,
-      transparent: true,
-      opacity: 1
-    })
-  );
-  horizonCore.renderOrder = 10;
-  horizonCore.material.depthTest = false;
-  horizonCore.material.depthWrite = false;
-  singularity.add(horizonCore);
+  const horizonDepthOccluder = createDepthOnlyHorizonOccluder(blackHoleMetrics.shadowRadius * 0.92);
+  horizonDepthOccluder.renderOrder = 4;
+  horizonDepthOccluder.raycast = () => {};
+  singularity.add(horizonDepthOccluder);
 
   const relativisticSingularity = createRelativisticSingularity({
     metrics: blackHoleMetrics,
@@ -801,20 +879,32 @@ export function createSingularityScene({
     return isMobileViewport() ? POST_PROCESSING.bloom.mobile : POST_PROCESSING.bloom.desktop;
   }
 
+  function updateParticleHorizonUniforms(mask) {
+    for (const points of [starField, accretionDust, burstParticles, contactParticles]) {
+      points.material.uniforms.uHorizonCenter.value.copy(mask.center);
+      points.material.uniforms.uHorizonRadius.value = mask.radius;
+      points.material.uniforms.uHorizonAspect.value = mask.aspect;
+      points.material.uniforms.uHorizonDepth.value = mask.depth;
+      points.material.uniforms.uHorizonOccluderDepth.value = mask.occluderDepth;
+    }
+  }
+
   function updateHorizonMaskUniforms(width = window.innerWidth, height = window.innerHeight) {
-    horizonCore.getWorldPosition(horizonWorldCenter);
+    singularity.getWorldPosition(horizonWorldCenter);
     camera.updateMatrixWorld();
     const mask = computeProjectedHorizonMask({
       camera,
       center: horizonWorldCenter,
-      radius: horizonCore.geometry.parameters.radius ?? 1.18,
+      radius: blackHoleMetrics.shadowRadius,
       width,
       height
     });
+    currentHorizonMask = mask;
 
     cinematicPass.uniforms.uHorizonCenter.value.copy(mask.center);
     cinematicPass.uniforms.uHorizonRadius.value = mask.radius;
     cinematicPass.uniforms.uAspect.value = mask.aspect;
+    updateParticleHorizonUniforms(mask);
   }
 
   function resize() {
@@ -870,16 +960,27 @@ export function createSingularityScene({
       const x = clamp(anchorX, 120, width - 120);
       const y = clamp(anchorY, 84, height - 72);
       const depthOpacity = projected.z > 1 ? 0.18 : 0.58 + Math.max(0, group.position.z / 13);
+      const horizonVisibility = group.userData.horizonVisibility ?? 1;
+      const connectorVisibility = Math.pow(horizonVisibility, 1.8);
+      const labelVisibility = activeSectionId && activeSectionId !== id
+        ? 0.16
+        : clamp(depthOpacity * (0.58 + horizonVisibility * 0.42), 0.28, 0.92);
 
       button.style.setProperty("--node-x", `${x}px`);
       button.style.setProperty("--node-y", `${y}px`);
       button.style.setProperty("--connector-x", `${Math.round(projectedX - x)}px`);
       button.style.setProperty("--connector-y", `${Math.round(projectedY - y)}px`);
-      button.style.opacity = activeSectionId && activeSectionId !== id ? "0.18" : `${clamp(depthOpacity, 0.46, 1)}`;
+      button.style.setProperty("--connector-opacity", `${connectorVisibility}`);
+      button.style.opacity = `${labelVisibility}`;
     });
   }
 
   function updateNodeMeshes(elapsed) {
+    if (!currentHorizonMask) {
+      updateHorizonMaskUniforms();
+    }
+    const projectedNode = new THREE.Vector3();
+
     NODE_LAYOUT.forEach((layout) => {
       const group = nodeMeshes.get(layout.id);
       const position = computeNodePosition(layout, elapsed, reducedMotion || activeSectionId);
@@ -888,9 +989,18 @@ export function createSingularityScene({
       const halo = group.children[1];
 
       group.position.set(position.x, position.y, position.z);
-      group.scale.setScalar(isHot ? 1.85 : 1);
-      core.material.opacity = activeSectionId && activeSectionId !== layout.id ? 0.18 : isHot ? 1 : 0.82;
-      halo.material.opacity = activeSectionId && activeSectionId !== layout.id ? 0.05 : isHot ? 0.36 : 0.16;
+      projectedNode.copy(group.position).project(camera);
+      const occlusion = computeNodeHorizonOcclusion({
+        projectedNode,
+        horizonMask: currentHorizonMask,
+        projectedHorizonDepth: currentHorizonMask.occluderDepth
+      });
+      const horizonVisibility = occlusion.visibility;
+      group.userData.horizonVisibility = horizonVisibility;
+      group.userData.horizonOcclusion = occlusion.occlusion;
+      group.scale.setScalar(isHot ? 1.58 : 0.88);
+      core.material.opacity = (activeSectionId && activeSectionId !== layout.id ? 0.12 : isHot ? 0.92 : 0.48) * horizonVisibility;
+      halo.material.opacity = (activeSectionId && activeSectionId !== layout.id ? 0.025 : isHot ? 0.2 : 0.07) * Math.pow(horizonVisibility, 1.35);
     });
   }
 
@@ -930,6 +1040,7 @@ export function createSingularityScene({
     burstParticles.userData.origin.copy(group.position);
     burstParticles.userData.startedAt = lastElapsed;
     burstParticles.userData.active = true;
+    burstParticles.userData.horizonVisibility = group.userData.horizonVisibility ?? 1;
     burstParticles.material.uniforms.uFade.value = 1;
   }
 
@@ -961,7 +1072,7 @@ export function createSingularityScene({
     }
 
     positions.needsUpdate = true;
-    burstParticles.material.uniforms.uFade.value = fade;
+    burstParticles.material.uniforms.uFade.value = fade * (burstParticles.userData.horizonVisibility ?? 1);
 
     if (progress >= 1) {
       burstParticles.userData.active = false;
@@ -1005,13 +1116,13 @@ export function createSingularityScene({
     starField.rotation.y = elapsed * (reducedMotion ? 0.0015 : 0.009);
     starField.rotation.x = Math.sin(elapsed * 0.08) * 0.02;
 
+    updateHorizonMaskUniforms();
     updateShaderUniforms(elapsed);
     updateNodeMeshes(elapsed);
     updateAccretionDust(elapsed);
     updateBurstParticles(elapsed);
     animateContactParticles(elapsed);
     updateNodeButtons(elapsed);
-    updateHorizonMaskUniforms();
     composer.render(delta);
   }
 
@@ -1109,7 +1220,8 @@ export function createSingularityScene({
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
     const hits = raycaster.intersectObjects(pickMeshes, false);
-    hoveredId = hits[0]?.object?.userData?.sectionId ?? null;
+    const visibleHit = hits.find((hit) => (hit.object.parent?.userData?.horizonVisibility ?? 1) > 0.12);
+    hoveredId = visibleHit?.object?.userData?.sectionId ?? null;
     canvas.style.cursor = hoveredId ? "pointer" : "default";
 
     if (!reducedMotion && !activeSectionId) {
