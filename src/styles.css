@@ -179,9 +179,9 @@ h1 {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   color: var(--text);
-  background: rgba(3, 8, 20, 0.64);
-  box-shadow: 0 0 2.5rem rgba(120, 215, 255, 0.12);
-  backdrop-filter: blur(14px);
+  background: rgba(3, 8, 20, 0.46);
+  box-shadow: 0 0 1.6rem rgba(120, 215, 255, 0.08);
+  backdrop-filter: blur(10px);
   cursor: pointer;
   pointer-events: auto;
   transition: transform 220ms var(--ease), border-color 220ms var(--ease), background 220ms var(--ease), opacity 220ms var(--ease);
@@ -207,7 +207,7 @@ h1 {
 .orbit-node-button[aria-selected="true"] {
   transform: translate(-50%, -50%) scale(1.06);
   border-color: rgba(120, 215, 255, 0.72);
-  background: rgba(9, 18, 42, 0.8);
+  background: rgba(9, 18, 42, 0.72);
 }
 
 html.is-distorting .orbit-node-button {

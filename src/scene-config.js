@@ -5,11 +5,11 @@ export const PACKAGE_VERSIONS = {
 };
 
 export const NODE_LAYOUT = [
-  { id: "experience", radius: 5.8, speed: 0.18, phase: 0.1, y: 0.35, labelX: 0.78, labelY: 0.48, color: "#78d7ff" },
-  { id: "projects", radius: 6.7, speed: 0.13, phase: 1.4, y: -0.2, labelX: 0.68, labelY: 0.72, color: "#b6a3ff" },
-  { id: "skills", radius: 5.1, speed: 0.22, phase: 2.55, y: 0.7, labelX: 0.31, labelY: 0.48, color: "#ffcc73" },
-  { id: "education", radius: 7.3, speed: 0.11, phase: 3.8, y: -0.55, labelX: 0.40, labelY: 0.72, color: "#8fffe0" },
-  { id: "contact", radius: 6.1, speed: 0.16, phase: 5.05, y: 0.05, labelX: 0.56, labelY: 0.86, color: "#ff8fc7" }
+  { id: "experience", radius: 5.8, speed: 0.18, phase: 0.1, y: 0.35, labelX: 0.84, labelY: 0.48, color: "#78d7ff" },
+  { id: "projects", radius: 6.7, speed: 0.13, phase: 1.4, y: -0.2, labelX: 0.76, labelY: 0.72, color: "#b6a3ff" },
+  { id: "skills", radius: 5.1, speed: 0.22, phase: 2.55, y: 0.7, labelX: 0.25, labelY: 0.48, color: "#ffcc73" },
+  { id: "education", radius: 7.3, speed: 0.11, phase: 3.8, y: -0.55, labelX: 0.30, labelY: 0.76, color: "#8fffe0" },
+  { id: "contact", radius: 6.1, speed: 0.16, phase: 5.05, y: 0.05, labelX: 0.56, labelY: 0.89, color: "#ff8fc7" }
 ];
 
 export const COLORS = {
@@ -37,14 +37,14 @@ export const POST_PROCESSING = {
   },
   bloom: {
     desktop: {
-      strength: 0.42,
-      radius: 0.22,
-      threshold: 0.56
+      strength: 0.54,
+      radius: 0.28,
+      threshold: 0.5
     },
     mobile: {
-      strength: 0.24,
-      radius: 0.14,
-      threshold: 0.58
+      strength: 0.3,
+      radius: 0.18,
+      threshold: 0.52
     },
     reducedMotion: {
       strength: 0,
@@ -53,12 +53,12 @@ export const POST_PROCESSING = {
     }
   },
   shaderPass: {
-    aberration: 0.0018,
+    aberration: 0.0012,
     diveAberration: 0.007,
     contactAberration: 0.0034,
-    lensDistortion: 0.08,
+    lensDistortion: 0.052,
     vignette: 0.62,
-    grain: 0.04
+    grain: 0.012
   }
 };
 
@@ -81,8 +81,8 @@ export const PARTICLE_BUDGETS = {
     mobile: PERFORMANCE_LIMITS.mobileStars
   },
   accretionDust: {
-    desktop: 1500,
-    mobile: 520
+    desktop: 760,
+    mobile: 280
   },
   sectionBurst: {
     desktop: 360,

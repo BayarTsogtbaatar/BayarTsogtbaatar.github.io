@@ -28,8 +28,9 @@ test("node layout defines five stable orbit nodes", () => {
 test("node layout includes deliberate non-overlapping label anchors", () => {
   assert.ok(NODE_LAYOUT.every((node) => Number.isFinite(node.labelX)));
   assert.ok(NODE_LAYOUT.every((node) => Number.isFinite(node.labelY)));
-  assert.ok(NODE_LAYOUT.every((node) => node.labelX >= 0.25 && node.labelX <= 0.82));
-  assert.ok(NODE_LAYOUT.every((node) => node.labelY >= 0.42 && node.labelY <= 0.88));
+  assert.ok(NODE_LAYOUT.every((node) => node.labelX >= 0.22 && node.labelX <= 0.86));
+  assert.ok(NODE_LAYOUT.every((node) => node.labelY >= 0.42 && node.labelY <= 0.92));
+  assert.ok(NODE_LAYOUT.every((node) => node.labelX < 0.38 || node.labelX > 0.66 || node.labelY > 0.78));
 });
 
 test("contact label anchor leaves the event horizon unobstructed", () => {
@@ -61,7 +62,10 @@ test("post-processing shader preserves a dark event-horizon mask", () => {
   const source = readFileSync("src/scene.js", "utf8");
   assert.ok(source.includes("uHorizonCenter"));
   assert.ok(source.includes("uHorizonShadow"));
+  assert.ok(source.includes("uHorizonRadius"));
   assert.ok(source.includes("horizonShadow"));
+  assert.ok(source.includes("computeProjectedHorizonMask({"));
+  assert.equal(source.includes("isMobileViewport() ? 0.55 : 0.58"), false);
 });
 
 test("post-processing bloom stays restrained for dark scene contrast", () => {
@@ -69,6 +73,14 @@ test("post-processing bloom stays restrained for dark scene contrast", () => {
   assert.ok(POST_PROCESSING.bloom.desktop.strength <= 0.62);
   assert.ok(POST_PROCESSING.bloom.mobile.threshold >= 0.42);
   assert.ok(POST_PROCESSING.bloom.mobile.strength <= 0.38);
+});
+
+test("post-processing grain stays cinematic instead of static-heavy", () => {
+  assert.ok(POST_PROCESSING.shaderPass.grain <= 0.014);
+  assert.ok(POST_PROCESSING.shaderPass.aberration <= 0.0014);
+  assert.ok(POST_PROCESSING.shaderPass.lensDistortion <= 0.055);
+  const source = readFileSync("src/scene.js", "utf8");
+  assert.ok(source.includes("grainMask"));
 });
 
 test("shader settings cover singularity, accretion disk, and particles", () => {
@@ -83,6 +95,8 @@ test("shader settings cover singularity, accretion disk, and particles", () => {
 test("particle budgets scale down on mobile and reduced motion", () => {
   assert.ok(PARTICLE_BUDGETS.starfield.desktop > PARTICLE_BUDGETS.starfield.mobile);
   assert.ok(PARTICLE_BUDGETS.accretionDust.desktop > PARTICLE_BUDGETS.accretionDust.mobile);
+  assert.ok(PARTICLE_BUDGETS.accretionDust.desktop <= 760);
+  assert.ok(PARTICLE_BUDGETS.accretionDust.mobile <= 280);
   assert.ok(PARTICLE_BUDGETS.sectionBurst.desktop > PARTICLE_BUDGETS.sectionBurst.mobile);
   assert.ok(PARTICLE_BUDGETS.reducedMotionMultiplier < 1);
 });
@@ -128,6 +142,13 @@ test("CSS contains required visual, fallback, and responsive selectors", () => {
   }
 });
 
+test("orbit node cards stay visually lighter than the singularity", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.ok(css.includes("background: rgba(3, 8, 20, 0.46);"));
+  assert.ok(css.includes("backdrop-filter: blur(10px);"));
+  assert.ok(css.includes("box-shadow: 0 0 1.6rem rgba(120, 215, 255, 0.08);"));
+});
+
 test("mobile orbit stack is placed below the hero copy with compact spacing", () => {
   const css = readFileSync("src/styles.css", "utf8");
   assert.ok(css.includes("top: calc(62% + (var(--node-index) - 2) * 6.2rem)"));
@@ -141,6 +162,78 @@ test("scene helper computes deterministic reduced-motion node positions", async 
   assert.ok(Number.isFinite(normal.x));
   assert.ok(Number.isFinite(normal.y));
   assert.ok(Number.isFinite(normal.z));
+});
+
+test("scene helper projects the horizon mask from camera math", async () => {
+  const THREE = await import("three");
+  const { computeProjectedHorizonMask } = await import("../src/scene.js");
+  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 100);
+  camera.position.set(0, 1.1, 11.5);
+  camera.updateMatrixWorld();
+  camera.updateProjectionMatrix();
+
+  const baseline = computeProjectedHorizonMask({
+    camera,
+    center: new THREE.Vector3(0, 0, 0),
+    radius: 1.18,
+    width: 1280,
+    height: 720
+  });
+  assert.ok(baseline.center.x > 0.45 && baseline.center.x < 0.55);
+  assert.ok(baseline.center.y > 0.3 && baseline.center.y < 0.5);
+  assert.ok(baseline.radius > 0.04 && baseline.radius < 0.18);
+
+  camera.position.y = 0;
+  camera.updateMatrixWorld();
+  const shifted = computeProjectedHorizonMask({
+    camera,
+    center: new THREE.Vector3(0, 0, 0),
+    radius: 1.18,
+    width: 1280,
+    height: 720
+  });
+  assert.notEqual(shifted.center.y, baseline.center.y);
+});
+
+test("scene helper derives Schwarzschild black hole metrics", async () => {
+  const { computeDopplerBeaming, computeKeplerianBeta, deriveBlackHoleMetrics } = await import("../src/scene.js");
+  const metrics = deriveBlackHoleMetrics({ eventHorizonRadius: 0.46, diskOuterRadius: 3.25 });
+
+  assert.equal(metrics.eventHorizonRadius, 0.46);
+  assert.equal(metrics.photonSphereRadius, 0.69);
+  assert.ok(Math.abs(metrics.shadowRadius - 1.195115) < 0.00001);
+  assert.equal(metrics.diskInnerRadius, 1.38);
+  assert.equal(metrics.diskOuterRadius, 3.25);
+
+  const innerBeta = computeKeplerianBeta(metrics.diskInnerRadius, metrics.eventHorizonRadius);
+  const outerBeta = computeKeplerianBeta(metrics.diskOuterRadius, metrics.eventHorizonRadius);
+  assert.ok(innerBeta > outerBeta);
+  assert.ok(innerBeta > 0.4 && innerBeta < 0.42);
+
+  const approaching = computeDopplerBeaming({
+    radius: metrics.diskInnerRadius,
+    eventHorizonRadius: metrics.eventHorizonRadius,
+    inclination: Math.PI * 0.42,
+    azimuth: 0
+  });
+  const receding = computeDopplerBeaming({
+    radius: metrics.diskInnerRadius,
+    eventHorizonRadius: metrics.eventHorizonRadius,
+    inclination: Math.PI * 0.42,
+    azimuth: Math.PI
+  });
+
+  assert.ok(approaching > 1);
+  assert.ok(receding < 1);
+  assert.ok(approaching > receding);
+});
+
+test("scene constructs a larger cinematic reference-scale singularity", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  assert.ok(source.includes("eventHorizonRadius: 0.62"));
+  assert.ok(source.includes("diskOuterRadius: 3.75"));
+  assert.ok(source.includes("metrics.diskOuterRadius * 3.95"));
+  assert.ok(source.includes("metrics.diskOuterRadius * 2.05"));
 });
 
 test("scene animation loop uses current Three.js timer API", () => {
@@ -158,7 +251,7 @@ test("scene module imports post-processing passes and uses custom shader materia
     'three/addons/postprocessing/ShaderPass.js',
     'three/addons/postprocessing/OutputPass.js',
     "new THREE.ShaderMaterial",
-    "lensing",
+    "lensedDisk",
     "photon",
     "doppler",
     "burstParticles"
@@ -175,6 +268,110 @@ test("event horizon core renders as an unobscured black layer", () => {
   assert.ok(source.includes("horizonCore.material.depthWrite = false"));
 });
 
+test("singularity shader uses physics-derived lensing and disk math", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  assert.ok(source.includes("relativisticBlackHoleFragmentShader"));
+  assert.ok(source.includes("createRelativisticSingularity"));
+  assert.ok(source.includes("uEventHorizonRadius"));
+  assert.ok(source.includes("uPhotonSphereRadius"));
+  assert.ok(source.includes("uShadowRadius"));
+  assert.ok(source.includes("uDiskInnerRadius"));
+  assert.ok(source.includes("uInclination"));
+  assert.ok(source.includes("keplerianBeta"));
+  assert.ok(source.includes("dopplerFactor"));
+  assert.ok(source.includes("lensedDisk"));
+  assert.equal(source.includes("createForegroundLightBridge"), false);
+  assert.equal(source.includes("createForegroundAccretionBand"), false);
+});
+
+test("singularity shader matches the reference-style black hole features", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "equatorialBeam",
+    "upperLensingArc",
+    "rimChroma",
+    "plasmaTail",
+    "shadowCutout",
+    "metrics.diskOuterRadius * 3.95"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing reference-style shader fragment ${fragment}`);
+  }
+});
+
+test("scene tilts the black hole view so the accretion disk reads as a ring", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "const SINGULARITY_VIEW_TILT",
+    "const DISK_VIEW_INCLINATION",
+    "const DISK_PLANE_TILT",
+    "singularity.rotation.set(SINGULARITY_VIEW_TILT.x, SINGULARITY_VIEW_TILT.y, SINGULARITY_VIEW_TILT.z)",
+    "relativisticSingularity.rotation.x = DISK_PLANE_TILT",
+    "accretionDust.rotation.x = DISK_PLANE_TILT",
+    "SINGULARITY_VIEW_TILT.x + pointer.y * 0.018"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing tilted disk view fragment ${fragment}`);
+  }
+});
+
+test("singularity shader thickens and tilts the left-to-right accretion beam itself", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "float diskBeamAxis = p.y + p.x * 0.115",
+    "float diskBeamThickness = uEventHorizonRadius * 0.46",
+    "float equatorialBeam = exp(-pow(diskBeamAxis / diskBeamThickness, 2.0))",
+    "float beamCore = exp(-pow(diskBeamAxis / (uEventHorizonRadius * 0.18), 2.0))",
+    "float broadDiskGlow = exp(-pow(diskBeamAxis / (uEventHorizonRadius * 0.82), 2.0))",
+    "broadDiskGlow * 0.72",
+    "max(equatorialBeam * shadowCutout, broadDiskGlow * 0.46)"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing thick tilted beam fragment ${fragment}`);
+  }
+});
+
+test("singularity shader renders an absent center with lensed background light and tidal stretching", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "hardVoid",
+    "voidCutout",
+    "lensedStarSmear",
+    "duplicatedLightArc",
+    "tidalFilaments",
+    "approachingBoost",
+    "color = mix(color, vec3(0.0), hardVoid"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing spacetime-wound shader fragment ${fragment}`);
+  }
+});
+
+test("singularity shader and dust make the upper arc feed heavier plasma into the horizon", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "topFeedStream",
+    "feedStreamMask",
+    "upperFeedColor",
+    "denseHorizonDust",
+    "topFeedBias",
+    "radii[i] = topFeedBias ? 1.28 + Math.random() * 2.85 : 1.62 + Math.random() * 3.65",
+    "layers[i] = topFeedBias ? 0.18 + Math.random() * 0.46 : (Math.random() - 0.5) * 0.16",
+    "createParticleMaterial({ opacity: 0.26 })"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing heavier upper-feed fragment ${fragment}`);
+  }
+});
+
+test("accretion dust stays warm and controlled instead of confetti-like", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "const ember = colorToArray(\"#ffad4a\")",
+    "const smoke = colorToArray(\"#6d1f19\")",
+    "sizes[i] = 0.16 + Math.random() * 0.42",
+    "createParticleMaterial({ opacity: 0.26 })",
+    "layers[i] = topFeedBias ? 0.18 + Math.random() * 0.46 : (Math.random() - 0.5) * 0.16"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing subtle plasma dust fragment ${fragment}`);
+  }
+});
+
 test("particle shader clamps point size to avoid starfield washout", () => {
   const source = readFileSync("src/scene.js", "utf8");
   assert.ok(source.includes("gl_PointSize = clamp("));
@@ -188,6 +385,12 @@ test("scene keeps HTML labels on stable anchors and tracks nodes with connector 
   assert.ok(source.includes("activeSectionId ? 0 : 14"));
   assert.ok(source.includes("--connector-x"));
   assert.ok(source.includes("--connector-y"));
+});
+
+test("portfolio orbit guides stay subdued behind the cinematic singularity", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  assert.ok(source.includes("opacity: 0.055"));
+  assert.ok(source.includes("opacity: 0.18"));
 });
 
 test("main app imports styles, content, state, and UI modules", () => {
