@@ -65,7 +65,6 @@ function renderSkills(section) {
 
 function renderContact(section) {
   return `<div class="contact-layout">
-  <div class="contact-particle-field" aria-hidden="true"></div>
   ${renderContactLinks(section.links)}
 </div>`;
 }

@@ -165,7 +165,6 @@ test("CSS contains required visual, fallback, and responsive selectors", () => {
     "#singularity-canvas",
     ".orbit-node-button",
     ".content-panel",
-    ".contact-particle-field",
     ".webgl-fallback",
     "@media (prefers-reduced-motion: reduce)",
     "@media (max-width: 760px)"
@@ -224,6 +223,15 @@ test("hero title stack keeps the name, headline, and tags separated", () => {
 test("mobile orbit stack is placed below the hero copy with compact spacing", () => {
   const css = readFileSync("src/styles.css", "utf8");
   assert.ok(css.includes("top: calc(62% + (var(--node-index) - 2) * 6.2rem)"));
+});
+
+test("contact panel has no large decorative particle field", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  const uiSource = readFileSync("src/ui.js", "utf8");
+  assert.equal(css.includes(".contact-particle-field"), false);
+  assert.equal(uiSource.includes("contact-particle-field"), false);
+  assert.ok(css.includes(".contact-layout"));
+  assert.ok(css.includes(".contact-links"));
 });
 
 test("scene helper computes deterministic reduced-motion node positions", async () => {

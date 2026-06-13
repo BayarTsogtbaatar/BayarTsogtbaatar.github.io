@@ -40,11 +40,12 @@ test("renderSectionPanel renders project links and back control", () => {
   assert.ok(html.includes('data-action="back-to-orbit"'));
 });
 
-test("renderSectionPanel gives contact a particle field", () => {
+test("renderSectionPanel keeps contact focused on links without a decorative field", () => {
   const contact = sections.find((section) => section.id === "contact");
   const html = renderSectionPanel(contact);
-  assert.ok(html.includes('class="contact-particle-field"'));
-  assert.ok(html.includes('aria-hidden="true"'));
+  assert.ok(html.includes('class="contact-links"'));
+  assert.equal(html.includes('class="contact-particle-field"'), false);
+  assert.equal(html.includes('aria-hidden="true"'), false);
 });
 
 test("renderContactLinks includes every contact target", () => {
