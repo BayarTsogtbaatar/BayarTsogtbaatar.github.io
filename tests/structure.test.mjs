@@ -40,3 +40,30 @@ test("package json uses Vite, Three.js, and GSAP", () => {
   assert.equal(pkg.dependencies.gsap, "3.15.0");
   assert.equal(pkg.devDependencies.vite, "8.0.16");
 });
+
+test("index contains the Vite app shell", () => {
+  const html = readFileSync("index.html", "utf8");
+  assert.ok(html.includes('<main id="app"'));
+  assert.ok(html.includes('id="singularity-stage"'));
+  assert.ok(html.includes('id="singularity-canvas"'));
+  assert.ok(html.includes('id="orbit-controls"'));
+  assert.ok(html.includes('id="section-panels"'));
+  assert.ok(html.includes('type="module" src="/src/main.js"'));
+});
+
+test("CSS contains required visual, fallback, and responsive selectors", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  for (const selector of [
+    ".app-shell",
+    ".singularity-stage",
+    "#singularity-canvas",
+    ".orbit-node-button",
+    ".content-panel",
+    ".contact-particle-field",
+    ".webgl-fallback",
+    "@media (prefers-reduced-motion: reduce)",
+    "@media (max-width: 760px)"
+  ]) {
+    assert.ok(css.includes(selector), `Missing selector ${selector}`);
+  }
+});
