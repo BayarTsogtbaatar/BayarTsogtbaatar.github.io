@@ -50,6 +50,7 @@ test("post-processing config defines composer passes and responsive bloom", () =
     "RenderPass",
     "UnrealBloomPass",
     "ShaderPass",
+    "SelectiveBloomComposite",
     "OutputPass"
   ]);
   assert.ok(POST_PROCESSING.bloom.desktop.strength > POST_PROCESSING.bloom.mobile.strength);
@@ -69,10 +70,39 @@ test("post-processing shader preserves a dark event-horizon mask", () => {
 });
 
 test("post-processing bloom stays restrained for dark scene contrast", () => {
-  assert.ok(POST_PROCESSING.bloom.desktop.threshold >= 0.38);
-  assert.ok(POST_PROCESSING.bloom.desktop.strength <= 0.62);
-  assert.ok(POST_PROCESSING.bloom.mobile.threshold >= 0.42);
-  assert.ok(POST_PROCESSING.bloom.mobile.strength <= 0.38);
+  assert.ok(POST_PROCESSING.bloom.desktop.threshold >= 0.64);
+  assert.ok(POST_PROCESSING.bloom.desktop.strength <= 0.34);
+  assert.ok(POST_PROCESSING.bloom.mobile.threshold >= 0.66);
+  assert.ok(POST_PROCESSING.bloom.mobile.strength <= 0.22);
+  const source = readFileSync("src/scene.js", "utf8");
+  assert.ok(source.includes("bloom * 0.42"));
+});
+
+test("scene uses selective bloom so UI nodes do not feed global glow", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "const DEFAULT_LAYER = 0",
+    "const BLOOM_LAYER = 1",
+    "const selectiveBloomCompositeShader",
+    "const bloomComposer = new EffectComposer(renderer)",
+    "bloomComposer.renderToScreen = false",
+    "const finalComposer = new EffectComposer(renderer)",
+    "bloomTexture: { value: null }",
+    "selectiveBloomPass.uniforms.bloomTexture.value = bloomComposer.renderTarget2.texture",
+    "relativisticSingularity.layers.enable(BLOOM_LAYER)",
+    "accretionDust.layers.enable(BLOOM_LAYER)",
+    "camera.layers.set(BLOOM_LAYER)",
+    "bloomComposer.render(delta)",
+    "camera.layers.set(DEFAULT_LAYER)",
+    "finalComposer.render(delta)"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing selective bloom fragment ${fragment}`);
+  }
+  assert.equal(source.includes("composer.addPass(bloomPass)"), false);
+  assert.equal(source.includes("composer.render(delta)"), false);
+  assert.equal(source.includes("bloomTexture: { value: bloomComposer.renderTarget2.texture }"), false);
+  assert.equal(source.includes("core.layers.enable(BLOOM_LAYER)"), false);
+  assert.equal(source.includes("halo.layers.enable(BLOOM_LAYER)"), false);
 });
 
 test("post-processing grain stays cinematic instead of static-heavy", () => {
@@ -88,10 +118,36 @@ test("shader settings cover singularity, accretion disk, and particles", () => {
   assert.ok(SHADER_SETTINGS.eventHorizon.uniforms.includes("uLensing"));
   assert.ok(SHADER_SETTINGS.accretionDisk.uniforms.includes("uDopplerBias"));
   assert.ok(SHADER_SETTINGS.accretionDisk.uniforms.includes("uTurbulence"));
+  for (const uniform of ["uPlasmaFlow", "uPlasmaShear", "uPlasmaIntensity"]) {
+    assert.ok(SHADER_SETTINGS.accretionDisk.uniforms.includes(uniform));
+  }
   for (const uniform of ["uContactBoost", "uHorizonCenter", "uHorizonRadius", "uHorizonDepth", "uHorizonOccluderDepth"]) {
     assert.ok(SHADER_SETTINGS.orbitalParticles.uniforms.includes(uniform));
   }
   assert.ok(SHADER_SETTINGS.orbitalParticles.additive);
+});
+
+test("accretion disk shader uses lava-inspired advected plasma noise without lava assets", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "uniform float uPlasmaFlow",
+    "uniform float uPlasmaShear",
+    "uniform float uPlasmaIntensity",
+    "float plasmaNoise(vec2 uv)",
+    "vec2 plasmaUvA",
+    "vec2 plasmaUvB",
+    "float plasmaAdvection",
+    "float plasmaCounterflow",
+    "float hotPlasma",
+    "uPlasmaFlow: { value: reducedMotion ? 0.08 : 0.42 }",
+    "uPlasmaShear: { value: reducedMotion ? 0.16 : 0.48 }",
+    "uPlasmaIntensity: { value: reducedMotion ? 0.24 : 0.56 }"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing plasma shader fragment ${fragment}`);
+  }
+  assert.equal(source.includes("textures/lava"), false);
+  assert.equal(source.includes("lavatile"), false);
+  assert.equal(source.includes("cloudTexture"), false);
 });
 
 test("particle budgets scale down on mobile and reduced motion", () => {

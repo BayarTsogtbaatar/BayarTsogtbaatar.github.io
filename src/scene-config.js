@@ -29,7 +29,7 @@ export const PERFORMANCE_LIMITS = {
 };
 
 export const POST_PROCESSING = {
-  passes: ["EffectComposer", "RenderPass", "UnrealBloomPass", "ShaderPass", "OutputPass"],
+  passes: ["EffectComposer", "RenderPass", "UnrealBloomPass", "ShaderPass", "SelectiveBloomComposite", "OutputPass"],
   composerScale: {
     desktop: 1,
     mobile: 0.72,
@@ -37,14 +37,14 @@ export const POST_PROCESSING = {
   },
   bloom: {
     desktop: {
-      strength: 0.44,
-      radius: 0.22,
-      threshold: 0.56
+      strength: 0.3,
+      radius: 0.16,
+      threshold: 0.68
     },
     mobile: {
-      strength: 0.24,
-      radius: 0.15,
-      threshold: 0.58
+      strength: 0.18,
+      radius: 0.12,
+      threshold: 0.7
     },
     reducedMotion: {
       strength: 0,
@@ -68,7 +68,7 @@ export const SHADER_SETTINGS = {
     uniforms: ["uTime", "uPhotonRing", "uLensing", "uInnerVoid"]
   },
   accretionDisk: {
-    uniforms: ["uTime", "uDopplerBias", "uTurbulence", "uInnerColor", "uOuterColor"]
+    uniforms: ["uTime", "uDopplerBias", "uTurbulence", "uPlasmaFlow", "uPlasmaShear", "uPlasmaIntensity", "uInnerColor", "uOuterColor"]
   },
   orbitalParticles: {
     uniforms: ["uTime", "uPixelRatio", "uContactBoost", "uFade", "uHorizonCenter", "uHorizonRadius", "uHorizonAspect", "uHorizonDepth", "uHorizonOccluderDepth"],

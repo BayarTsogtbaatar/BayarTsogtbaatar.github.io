@@ -15,6 +15,8 @@ import {
 } from "./scene-config.js";
 
 const TAU = Math.PI * 2;
+const DEFAULT_LAYER = 0;
+const BLOOM_LAYER = 1;
 
 const SCHWARZSCHILD_SHADOW_FACTOR = (3 * Math.sqrt(3)) / 2;
 const SINGULARITY_VIEW_TILT = Object.freeze({
@@ -44,6 +46,9 @@ const relativisticBlackHoleFragmentShader = `
   uniform float uInclination;
   uniform float uSpinPhase;
   uniform float uOpacity;
+  uniform float uPlasmaFlow;
+  uniform float uPlasmaShear;
+  uniform float uPlasmaIntensity;
   uniform vec3 uInnerColor;
   uniform vec3 uOuterColor;
 
@@ -62,6 +67,20 @@ const relativisticBlackHoleFragmentShader = `
       mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), u.x),
       u.y
     );
+  }
+
+  float plasmaNoise(vec2 uv) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    vec2 shift = vec2(13.7, 5.1);
+
+    for (int octave = 0; octave < 4; octave++) {
+      value += noise2(uv) * amplitude;
+      uv = uv * 2.04 + shift;
+      amplitude *= 0.5;
+    }
+
+    return value;
   }
 
   float keplerianBeta(float radius) {
@@ -89,12 +108,23 @@ const relativisticBlackHoleFragmentShader = `
     float doppler = dopplerFactor(radius, azimuth);
     float gravitationalRedshift = sqrt(max(0.08, 1.0 - uEventHorizonRadius / max(radius, uEventHorizonRadius * 1.04)));
     float temperature = pow(uDiskInnerRadius / max(radius, uDiskInnerRadius), 0.75);
-    float turbulence = noise2(vec2(azimuth * 3.2 + uTime * 0.25, radius * 5.2 - uTime * 0.42));
-    float filament = sin(azimuth * 28.0 + uTime * (2.0 + orbitSpeed * 4.0) + radius * 6.0) * 0.5 + 0.5;
-    float tightFilament = smoothstep(0.52, 1.0, sin(azimuth * 58.0 - uTime * 0.75 + radius * 15.0) * 0.5 + 0.5);
-    vec3 color = mix(uOuterColor, uInnerColor, clamp(temperature * 1.18 + turbulence * 0.22 + underside * 0.12, 0.0, 1.0));
+    vec2 orbitalUv = vec2(azimuth * 0.159154943 + 0.5, radius / max(uDiskOuterRadius, 0.001));
+    vec2 plasmaUvA = orbitalUv * vec2(7.4, 4.2) + vec2(uTime * uPlasmaFlow * (0.34 + orbitSpeed), -uTime * uPlasmaFlow * 0.18);
+    vec2 plasmaUvB = orbitalUv * vec2(12.6, 2.8) + vec2(-uTime * uPlasmaFlow * 0.15, uTime * uPlasmaFlow * (0.24 + orbitSpeed * 0.55));
+    float plasmaAdvection = plasmaNoise(plasmaUvA + vec2(noise2(plasmaUvB), noise2(plasmaUvB.yx)) * uPlasmaShear);
+    float plasmaCounterflow = plasmaNoise(plasmaUvB + vec2(plasmaAdvection, 1.0 - plasmaAdvection) * uPlasmaShear * 0.72);
+    float hotPlasma = smoothstep(0.56, 1.0, plasmaAdvection * 0.7 + plasmaCounterflow * 0.44) * uPlasmaIntensity * (0.34 + temperature * 0.84);
+    float turbulence = mix(
+      noise2(vec2(azimuth * 3.2 + uTime * 0.25, radius * 5.2 - uTime * 0.42)),
+      plasmaAdvection,
+      0.58
+    );
+    float filament = sin(azimuth * 28.0 + uTime * (2.0 + orbitSpeed * 4.0) + radius * 6.0 + plasmaAdvection * 2.8) * 0.5 + 0.5;
+    float tightFilament = smoothstep(0.52, 1.0, sin(azimuth * 58.0 - uTime * 0.75 + radius * 15.0 + plasmaCounterflow * 3.2) * 0.5 + 0.5);
+    vec3 color = mix(uOuterColor, uInnerColor, clamp(temperature * 1.18 + turbulence * 0.22 + underside * 0.12 + hotPlasma * 0.18, 0.0, 1.0));
+    color += mix(vec3(1.0, 0.35, 0.08), vec3(1.0, 0.86, 0.36), temperature) * hotPlasma * 0.42;
     color += vec3(1.0, 0.86, 0.42) * pow(temperature, 2.85) * (0.72 + doppler * 0.32);
-    float alpha = diskWindow(radius) * lensWeight * (0.2 + temperature * 0.74 + filament * 0.22 + tightFilament * 0.2 + turbulence * 0.08);
+    float alpha = diskWindow(radius) * lensWeight * (0.2 + temperature * 0.74 + filament * 0.22 + tightFilament * 0.2 + turbulence * 0.08 + hotPlasma * 0.16);
     return vec4(color * gravitationalRedshift * doppler, alpha);
   }
 
@@ -262,6 +292,29 @@ const particleFragmentShader = `
     gl_FragColor = vec4(vColor, alpha);
   }
 `;
+
+const selectiveBloomCompositeShader = {
+  vertexShader: `
+    varying vec2 vUv;
+
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D baseTexture;
+    uniform sampler2D bloomTexture;
+
+    varying vec2 vUv;
+
+    void main() {
+      vec4 base = texture2D(baseTexture, vUv);
+      vec3 bloom = texture2D(bloomTexture, vUv).rgb;
+      gl_FragColor = vec4(base.rgb + bloom * 0.42, base.a);
+    }
+  `
+};
 
 const cinematicPostShader = {
   uniforms: {
@@ -662,6 +715,9 @@ function createRelativisticSingularity({ metrics, inclination, reducedMotion }) 
         uInclination: { value: inclination },
         uSpinPhase: { value: 0 },
         uOpacity: { value: reducedMotion ? 0.78 : 1 },
+        uPlasmaFlow: { value: reducedMotion ? 0.08 : 0.42 },
+        uPlasmaShear: { value: reducedMotion ? 0.16 : 0.48 },
+        uPlasmaIntensity: { value: reducedMotion ? 0.24 : 0.56 },
         uInnerColor: { value: new THREE.Color("#fff4bd") },
         uOuterColor: { value: new THREE.Color(reducedMotion ? COLORS.accretionWarm : "#ff7436") }
       },
@@ -785,8 +841,8 @@ export function createSingularityScene({
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 140);
   camera.position.set(0, 1.1, reducedMotion ? 12 : 18);
 
-  const composer = new EffectComposer(renderer);
-  const renderPass = new RenderPass(scene, camera);
+  const bloomRenderPass = new RenderPass(scene, camera);
+  const finalRenderPass = new RenderPass(scene, camera);
   const bloomProfile = reducedMotion
     ? POST_PROCESSING.bloom.reducedMotion
     : isMobileViewport()
@@ -798,12 +854,32 @@ export function createSingularityScene({
     bloomProfile.radius,
     bloomProfile.threshold
   );
+  const bloomComposer = new EffectComposer(renderer);
+  bloomComposer.renderToScreen = false;
+  bloomComposer.addPass(bloomRenderPass);
+  bloomComposer.addPass(bloomPass);
+
+  const selectiveBloomPass = new ShaderPass(
+    new THREE.ShaderMaterial({
+      uniforms: {
+        baseTexture: { value: null },
+        bloomTexture: { value: null }
+      },
+      vertexShader: selectiveBloomCompositeShader.vertexShader,
+      fragmentShader: selectiveBloomCompositeShader.fragmentShader,
+      depthTest: false,
+      depthWrite: false
+    }),
+    "baseTexture"
+  );
+  selectiveBloomPass.uniforms.bloomTexture.value = bloomComposer.renderTarget2.texture;
   const cinematicPass = new ShaderPass(cinematicPostShader);
   const outputPass = new OutputPass();
-  composer.addPass(renderPass);
-  composer.addPass(bloomPass);
-  composer.addPass(cinematicPass);
-  composer.addPass(outputPass);
+  const finalComposer = new EffectComposer(renderer);
+  finalComposer.addPass(finalRenderPass);
+  finalComposer.addPass(selectiveBloomPass);
+  finalComposer.addPass(cinematicPass);
+  finalComposer.addPass(outputPass);
 
   const timer = new THREE.Timer();
   timer.connect(document);
@@ -870,10 +946,12 @@ export function createSingularityScene({
     reducedMotion
   });
   relativisticSingularity.rotation.x = DISK_PLANE_TILT;
+  relativisticSingularity.layers.enable(BLOOM_LAYER);
   singularity.add(relativisticSingularity);
 
   const accretionDust = createAccretionDust(getBudget("accretionDust", reducedMotion));
   accretionDust.rotation.x = DISK_PLANE_TILT;
+  accretionDust.layers.enable(BLOOM_LAYER);
   scene.add(accretionDust);
 
   NODE_LAYOUT.forEach((layout) => {
@@ -943,8 +1021,10 @@ export function createSingularityScene({
 
     renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width, height, false);
-    composer.setPixelRatio(composerPixelRatio);
-    composer.setSize(width, height);
+    bloomComposer.setPixelRatio(composerPixelRatio);
+    bloomComposer.setSize(width, height);
+    finalComposer.setPixelRatio(composerPixelRatio);
+    finalComposer.setSize(width, height);
     bloomPass.strength = activeBloom.strength;
     bloomPass.radius = activeBloom.radius;
     bloomPass.threshold = activeBloom.threshold;
@@ -1231,7 +1311,10 @@ export function createSingularityScene({
     updateBurstParticles(elapsed);
     animateContactParticles(elapsed);
     updateNodeButtons(elapsed);
-    composer.render(delta);
+    camera.layers.set(BLOOM_LAYER);
+    bloomComposer.render(delta);
+    camera.layers.set(DEFAULT_LAYER);
+    finalComposer.render(delta);
   }
 
   function setHoveredSection(id) {
@@ -1397,7 +1480,8 @@ export function createSingularityScene({
     gsap.killTweensOf(singularity.rotation);
     gsap.killTweensOf(cinematicPass.uniforms.uSceneTransition);
     timer.dispose();
-    composer.dispose();
+    bloomComposer.dispose();
+    finalComposer.dispose();
     renderer.dispose();
     scene.traverse((object) => {
       object.geometry?.dispose?.();
