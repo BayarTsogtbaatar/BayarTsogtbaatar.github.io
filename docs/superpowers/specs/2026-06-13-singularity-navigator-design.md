@@ -48,6 +48,14 @@ The section state is Focus:
 
 ## Content
 
+Hero/profile copy should use verified profile facts from the user-supplied LinkedIn profile URL and public profile metadata:
+
+- LinkedIn URL: https://www.linkedin.com/in/bayar-t/
+- Public profile headline: Cloud App Dev @ AWS | 8x AWS Certified.
+- Current organization signal: Amazon Web Services.
+- Education signal: University of California, San Diego.
+- Location signal: Sacramento, California, United States.
+
 Experience uses the current resume entries:
 
 - Amazon Web Services, Associate Cloud App Developer, Nov 2022 to Present.
@@ -74,9 +82,10 @@ Projects v1 includes one polished project entry for this portfolio rebuild:
 
 Contact v1 includes:
 
+- LinkedIn link: https://www.linkedin.com/in/bayar-t/
 - GitHub link: https://github.com/BayarTsogtbaatar
 - GitHub Pages repository link: https://github.com/BayarTsogtbaatar/BayarTsogtbaatar.github.io
-- No fabricated email or LinkedIn link. Add those only after the user supplies exact targets.
+- No fabricated email. Add email only after the user supplies an exact target.
 
 ## Architecture
 
