@@ -22,6 +22,13 @@ test("node layout defines five stable orbit nodes", () => {
   assert.ok(NODE_LAYOUT.every((node) => Number.isFinite(node.speed)));
 });
 
+test("node layout includes deliberate non-overlapping label anchors", () => {
+  assert.ok(NODE_LAYOUT.every((node) => Number.isFinite(node.labelX)));
+  assert.ok(NODE_LAYOUT.every((node) => Number.isFinite(node.labelY)));
+  assert.ok(NODE_LAYOUT.every((node) => node.labelX >= 0.25 && node.labelX <= 0.82));
+  assert.ok(NODE_LAYOUT.every((node) => node.labelY >= 0.42 && node.labelY <= 0.75));
+});
+
 test("performance limits cover low-end device tuning", () => {
   assert.equal(PERFORMANCE_LIMITS.maxPixelRatio, 2);
   assert.equal(PERFORMANCE_LIMITS.desktopStars, 1200);
@@ -76,6 +83,12 @@ test("scene helper computes deterministic reduced-motion node positions", async 
   assert.ok(Number.isFinite(normal.x));
   assert.ok(Number.isFinite(normal.y));
   assert.ok(Number.isFinite(normal.z));
+});
+
+test("scene animation loop uses current Three.js timer API", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  assert.ok(source.includes("new THREE.Timer()"));
+  assert.equal(source.includes("new THREE.Clock()"), false);
 });
 
 test("main app imports styles, content, state, and UI modules", () => {

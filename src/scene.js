@@ -137,7 +137,8 @@ export function createSingularityScene({
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 120);
   camera.position.set(0, 1.1, reducedMotion ? 12 : 18);
 
-  const clock = new THREE.Clock();
+  const timer = new THREE.Timer();
+  timer.connect(document);
   const pointer = new THREE.Vector2();
   const raycaster = new THREE.Raycaster();
   const nodeMeshes = new Map();
@@ -242,7 +243,7 @@ export function createSingularityScene({
     camera.updateProjectionMatrix();
   }
 
-  function updateNodeButtons() {
+  function updateNodeButtons(elapsed) {
     const width = window.innerWidth;
     const height = window.innerHeight;
     const projected = new THREE.Vector3();
@@ -252,8 +253,10 @@ export function createSingularityScene({
       if (!button) return;
 
       projected.copy(mesh.position).project(camera);
-      const x = clamp((projected.x * 0.5 + 0.5) * width, 88, width - 88);
-      const y = clamp((-projected.y * 0.5 + 0.5) * height, 72, height - 72);
+      const layout = mesh.userData.layout;
+      const drift = reducedMotion || width <= PERFORMANCE_LIMITS.mobileBreakpoint ? 0 : 18;
+      const x = clamp(layout.labelX * width + Math.sin(elapsed * 0.35 + layout.phase) * drift, 120, width - 120);
+      const y = clamp(layout.labelY * height + Math.cos(elapsed * 0.28 + layout.phase) * drift, 96, height - 80);
       const depthOpacity = projected.z > 1 ? 0.18 : 0.52 + Math.max(0, mesh.position.z / 12);
 
       button.style.setProperty("--node-x", `${x}px`);
@@ -297,11 +300,12 @@ export function createSingularityScene({
     contactParticles.rotation.y = elapsed * 0.25;
   }
 
-  function renderFrame() {
+  function renderFrame(timestamp) {
     if (!running) return;
     rafId = window.requestAnimationFrame(renderFrame);
 
-    const elapsed = clock.getElapsedTime();
+    timer.update(timestamp);
+    const elapsed = timer.getElapsed();
     singularity.rotation.y = elapsed * (reducedMotion ? 0.04 : 0.11);
     accretionWarm.rotation.z = elapsed * (reducedMotion ? 0.06 : 0.45);
     accretionCool.rotation.z = -elapsed * (reducedMotion ? 0.04 : 0.28);
@@ -310,7 +314,7 @@ export function createSingularityScene({
 
     updateNodeMeshes(elapsed);
     animateContactParticles(elapsed);
-    updateNodeButtons();
+    updateNodeButtons(elapsed);
     renderer.render(scene, camera);
   }
 
@@ -418,6 +422,7 @@ export function createSingularityScene({
     canvas.removeEventListener("click", handleClick);
     window.removeEventListener("resize", resize);
     gsap.killTweensOf(camera.position);
+    timer.dispose();
     renderer.dispose();
     scene.traverse((object) => {
       object.geometry?.dispose?.();

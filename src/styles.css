@@ -179,7 +179,7 @@ h1 {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   color: var(--text);
-  background: rgba(3, 8, 20, 0.5);
+  background: rgba(3, 8, 20, 0.64);
   box-shadow: 0 0 2.5rem rgba(120, 215, 255, 0.12);
   backdrop-filter: blur(14px);
   cursor: pointer;
@@ -359,9 +359,12 @@ h1 {
   .orbit-node-button {
     position: absolute;
     left: 50%;
-    top: calc(54% + (var(--node-index) - 2) * 5.1rem);
-    width: min(22rem, calc(100vw - 2rem));
+    top: calc(60% + (var(--node-index) - 2) * 7.5rem);
+    width: min(18rem, calc(100vw - 2rem));
+    max-width: min(18rem, calc(100vw - 2rem));
+    min-width: 0;
     transform: translate(-50%, -50%);
+    background: rgba(3, 8, 20, 0.78);
   }
 
   .content-panel {
