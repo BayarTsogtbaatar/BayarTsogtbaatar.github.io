@@ -17,6 +17,7 @@ import {
 const TAU = Math.PI * 2;
 const DEFAULT_LAYER = 0;
 const BLOOM_LAYER = 1;
+const ACCRETION_WAKE_BAND_COUNT = 16;
 
 const SCHWARZSCHILD_SHADOW_FACTOR = (3 * Math.sqrt(3)) / 2;
 const SINGULARITY_VIEW_TILT = Object.freeze({
@@ -243,12 +244,15 @@ const relativisticBlackHoleFragmentShader = `
 const particleVertexShader = `
   attribute float aSize;
   attribute float aSeed;
+  attribute float aWakeBand;
+  attribute float aWakePhase;
   attribute vec3 aColor;
 
   uniform float uTime;
   uniform float uPixelRatio;
   uniform float uContactBoost;
   uniform float uFade;
+  uniform float uWakeStrength;
   uniform vec2 uHorizonCenter;
   uniform float uHorizonRadius;
   uniform float uHorizonAspect;
@@ -261,6 +265,8 @@ const particleVertexShader = `
   void main() {
     vColor = aColor;
     float twinkle = sin(uTime * (0.8 + aSeed * 0.32) + aSeed * 12.0) * 0.5 + 0.5;
+    float wakeWave = sin(uTime * 1.35 + aWakePhase + aWakeBand * 6.28318530718) * 0.5 + 0.5;
+    float wakeScale = mix(1.0, 0.82 + wakeWave * 0.46, uWakeStrength);
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     vec4 clipPosition = projectionMatrix * mvPosition;
     vec3 ndcPosition = clipPosition.xyz / clipPosition.w;
@@ -273,8 +279,8 @@ const particleVertexShader = `
     float horizonOcclusion = clamp(max(hardHorizon, softHorizon), 0.0, 1.0);
     float horizonVisibility = 1.0 - horizonOcclusion;
     float depthScale = 92.0 / max(14.0, -mvPosition.z);
-    gl_PointSize = clamp(aSize * uPixelRatio * depthScale * (0.82 + twinkle * 0.28 + uContactBoost * 0.28), 0.7, 9.0);
-    vAlpha = uFade * (0.58 + twinkle * 0.42) * horizonVisibility;
+    gl_PointSize = clamp(aSize * uPixelRatio * depthScale * (0.82 + twinkle * 0.28 + uContactBoost * 0.28) * wakeScale, 0.7, 9.0);
+    vAlpha = uFade * (0.58 + twinkle * 0.42) * mix(1.0, 0.72 + wakeWave * 0.52, uWakeStrength) * horizonVisibility;
     gl_Position = clipPosition;
   }
 `;
@@ -290,6 +296,48 @@ const particleFragmentShader = `
     float halo = smoothstep(0.5, 0.18, dist) * 0.34;
     float alpha = (core + halo) * vAlpha;
     gl_FragColor = vec4(vColor, alpha);
+  }
+`;
+
+const heroParticleVertexShader = `
+  uniform float amplitude;
+  uniform float opacity;
+  uniform float uPixelRatio;
+  uniform float uTime;
+
+  attribute vec3 displacement;
+  attribute vec3 customColor;
+  attribute float aSize;
+  attribute float aSeed;
+
+  varying vec3 vColor;
+  varying float vAlpha;
+
+  void main() {
+    vec3 newPosition = position + amplitude * displacement;
+
+    vColor = customColor;
+    vAlpha = opacity * (0.92 + sin(uTime * 1.8 + aSeed) * 0.04 + amplitude * 0.1);
+
+    vec4 mvPosition = modelViewMatrix * vec4(newPosition, 1.0);
+    float depthScale = 112.0 / max(18.0, -mvPosition.z);
+    gl_PointSize = clamp(aSize * uPixelRatio * depthScale * (1.0 + amplitude * 0.56), 0.9, 3.65);
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+const heroParticleFragmentShader = `
+  uniform vec3 color;
+
+  varying vec3 vColor;
+  varying float vAlpha;
+
+  void main() {
+    vec2 coord = gl_PointCoord - vec2(0.5);
+    float dist = length(coord);
+    float core = smoothstep(0.48, 0.18, dist);
+    float halo = smoothstep(0.52, 0.08, dist) * 0.055;
+    gl_FragColor = vec4(vColor * color, (core + halo) * vAlpha);
   }
 `;
 
@@ -528,6 +576,13 @@ function getBudget(kind, reducedMotion = false) {
   return Math.max(24, Math.floor(base * (reducedMotion ? PARTICLE_BUDGETS.reducedMotionMultiplier : 1)));
 }
 
+function addNeutralWakeAttributes(geometry, count) {
+  const wakeBands = new Float32Array(count);
+  const wakePhases = new Float32Array(count);
+  geometry.setAttribute("aWakeBand", new THREE.BufferAttribute(wakeBands, 1));
+  geometry.setAttribute("aWakePhase", new THREE.BufferAttribute(wakePhases, 1));
+}
+
 function createParticleMaterial({ opacity = 1 } = {}) {
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -535,6 +590,7 @@ function createParticleMaterial({ opacity = 1 } = {}) {
       uPixelRatio: { value: 1 },
       uContactBoost: { value: 0 },
       uFade: { value: opacity },
+      uWakeStrength: { value: 0 },
       uHorizonCenter: { value: new THREE.Vector2(0.5, 0.5) },
       uHorizonRadius: { value: 0.1 },
       uHorizonAspect: { value: 1 },
@@ -590,15 +646,20 @@ function createStarField({ count, spread }) {
   geometry.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
   geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
   geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
+  addNeutralWakeAttributes(geometry, count);
 
   return new THREE.Points(geometry, createParticleMaterial({ opacity: 0.72 }));
 }
 
-function createAccretionDust(count) {
+function createAccretionDust(count, reducedMotion = false) {
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const sizes = new Float32Array(count);
   const seeds = new Float32Array(count);
+  const baseSizes = new Float32Array(count);
+  const wakeBands = new Float32Array(count);
+  const wakePhases = new Float32Array(count);
+  const wakeWeights = new Float32Array(count);
   const radii = new Float32Array(count);
   const speeds = new Float32Array(count);
   const layers = new Float32Array(count);
@@ -611,12 +672,21 @@ function createAccretionDust(count) {
   for (let i = 0; i < count; i += 1) {
     const index = i * 3;
     const mix = Math.random();
-    const topFeedBias = Math.random() < 0.38;
+    const bandIndex = i % ACCRETION_WAKE_BAND_COUNT;
+    const bandProgress = bandIndex / Math.max(1, ACCRETION_WAKE_BAND_COUNT - 1);
+    const bandCenter = bandProgress - 0.5;
+    const bandWave = Math.sin(bandProgress * Math.PI);
+    const topFeedBias = bandProgress > 0.58 || Math.random() < 0.18;
     seeds[i] = Math.random() * 100;
-    radii[i] = topFeedBias ? 1.28 + Math.random() * 2.85 : 1.62 + Math.random() * 3.65;
-    speeds[i] = topFeedBias ? 0.2 + Math.random() * 0.42 : 0.12 + Math.random() * 0.34;
-    layers[i] = topFeedBias ? 0.18 + Math.random() * 0.46 : (Math.random() - 0.5) * 0.16;
-    directions[i] = topFeedBias ? 1 : Math.random() > 0.45 ? 1 : -1;
+    wakeBands[i] = bandProgress;
+    wakePhases[i] = Math.floor(i / ACCRETION_WAKE_BAND_COUNT) * 0.41 + bandIndex * 0.73;
+    wakeWeights[i] = topFeedBias ? 0.92 + bandWave * 0.36 : 0.56 + bandWave * 0.32;
+    radii[i] = topFeedBias
+      ? 1.22 + bandWave * 2.42 + Math.random() * 0.5
+      : 1.58 + bandWave * 3.22 + Math.random() * 0.66;
+    speeds[i] = topFeedBias ? 0.2 + bandWave * 0.34 + Math.random() * 0.12 : 0.12 + bandWave * 0.26 + Math.random() * 0.1;
+    layers[i] = topFeedBias ? 0.18 + bandProgress * 0.38 + Math.random() * 0.1 : bandCenter * 0.18 + (Math.random() - 0.5) * 0.045;
+    directions[i] = topFeedBias ? 1 : bandIndex % 2 === 0 ? 1 : -1;
     topFeeds[i] = topFeedBias ? 1 : 0;
     const emberMix = Math.min(1, mix * 1.28);
     const colorA = mix < 0.72 ? hotCore : ember;
@@ -626,16 +696,24 @@ function createAccretionDust(count) {
     colors[index + 2] = lerp(colorA[2], colorB[2], emberMix);
     sizes[i] = 0.16 + Math.random() * 0.42;
     if (topFeedBias) sizes[i] += 0.2 + Math.random() * 0.34;
+    baseSizes[i] = sizes[i];
   }
 
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const positionAttribute = new THREE.BufferAttribute(positions, 3);
+  positionAttribute.setUsage(THREE.DynamicDrawUsage);
+  const sizeAttribute = new THREE.BufferAttribute(sizes, 1);
+  sizeAttribute.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute("position", positionAttribute);
   geometry.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
-  geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute("aSize", sizeAttribute);
   geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
-  geometry.userData = { radii, speeds, layers, directions, topFeeds };
+  geometry.setAttribute("aWakeBand", new THREE.BufferAttribute(wakeBands, 1));
+  geometry.setAttribute("aWakePhase", new THREE.BufferAttribute(wakePhases, 1));
+  geometry.userData = { radii, speeds, layers, directions, topFeeds, baseSizes, wakeBands, wakePhases, wakeWeights };
 
   const points = new THREE.Points(geometry, createParticleMaterial({ opacity: 0.26 }));
+  points.material.uniforms.uWakeStrength.value = reducedMotion ? 0.18 : 0.58;
   points.rotation.x = Math.PI * 0.1;
   return points;
 }
@@ -660,6 +738,7 @@ function createBurstParticles(count) {
   geometry.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
   geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
   geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
+  addNeutralWakeAttributes(geometry, count);
 
   const burstParticles = new THREE.Points(geometry, createParticleMaterial({ opacity: 0 }));
   burstParticles.userData = {
@@ -694,10 +773,143 @@ function createContactParticles(count) {
   geometry.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
   geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
   geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
+  addNeutralWakeAttributes(geometry, count);
 
   const particles = new THREE.Points(geometry, createParticleMaterial({ opacity: 0 }));
   particles.position.set(0, -1.1, 1.5);
   particles.userData.active = false;
+  return particles;
+}
+
+function drawTrackedText(context, text, x, y, tracking = 0) {
+  let offsetX = x;
+  for (const character of text) {
+    context.fillText(character, offsetX, y);
+    offsetX += context.measureText(character).width + tracking;
+  }
+}
+
+function createHeroParticleText(profile, { reducedMotion = false } = {}) {
+  const textCanvas = document.createElement("canvas");
+  const context = textCanvas.getContext("2d", { willReadFrequently: true });
+  const canvasWidth = 1320;
+  const canvasHeight = 430;
+  const maxParticles = reducedMotion ? 4200 : 14500;
+  const rawPoints = [];
+  const color = new THREE.Color();
+
+  textCanvas.width = canvasWidth;
+  textCanvas.height = canvasHeight;
+  context.clearRect(0, 0, canvasWidth, canvasHeight);
+  context.textBaseline = "alphabetic";
+  context.fillStyle = "#ffffff";
+
+  context.font = "800 30px Inter, Arial, sans-serif";
+  drawTrackedText(context, profile.location.toUpperCase(), 5, 56, 5.2);
+  context.font = "900 204px Inter, Arial, sans-serif";
+  context.fillText(profile.name, 0, 230);
+  context.font = "800 48px Inter, Arial, sans-serif";
+  context.fillText(profile.headline, 3, 310);
+
+  const image = context.getImageData(0, 0, canvasWidth, canvasHeight);
+  const alpha = image.data;
+  const sampleStep = reducedMotion ? 2 : 1;
+
+  for (let y = 0; y < canvasHeight; y += sampleStep) {
+    for (let x = 0; x < canvasWidth; x += sampleStep) {
+      const alphaIndex = (y * canvasWidth + x) * 4 + 3;
+      if (alpha[alphaIndex] > 46) {
+        rawPoints.push({ x, y, alpha: alpha[alphaIndex] / 255 });
+      }
+    }
+  }
+
+  const stride = Math.max(1, Math.ceil(rawPoints.length / maxParticles));
+  const points = rawPoints.filter((_, index) => index % stride === 0).slice(0, maxParticles);
+  const count = points.length;
+  const positions = new Float32Array(count * 3);
+  const displacements = new Float32Array(count * 3);
+  const baseDisplacements = new Float32Array(count * 3);
+  const phases = new Float32Array(count);
+  const customColors = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+  const seeds = new Float32Array(count);
+  const canvasAspect = canvasHeight / canvasWidth;
+
+  points.forEach((point, index) => {
+    const offset = index * 3;
+    const normalizedX = point.x / canvasWidth - 0.5;
+    const normalizedY = (0.5 - point.y / canvasHeight) * canvasAspect;
+    const radial = Math.max(0.1, Math.hypot(normalizedX, normalizedY));
+    const angle = Math.atan2(normalizedY, normalizedX) + (Math.random() - 0.5) * 0.9;
+    const scatter = 0.032 + Math.random() * 0.052 + radial * 0.14;
+    const displacementX = Math.cos(angle) * scatter + (Math.random() - 0.5) * 0.018;
+    const displacementY = Math.sin(angle) * scatter + (Math.random() - 0.5) * 0.018;
+    const displacementZ = (Math.random() - 0.5) * 0.046;
+    const warmMix = point.y > 260 ? 0.34 : point.y > 80 ? 0.12 : 0;
+    const coolAccent = point.y < 72 && index % 7 === 0;
+
+    positions[offset] = normalizedX;
+    positions[offset + 1] = normalizedY;
+    positions[offset + 2] = (Math.random() - 0.5) * 0.012;
+    displacements[offset] = displacementX;
+    displacements[offset + 1] = displacementY;
+    displacements[offset + 2] = displacementZ;
+    baseDisplacements[offset] = displacementX;
+    baseDisplacements[offset + 1] = displacementY;
+    baseDisplacements[offset + 2] = displacementZ;
+    phases[index] = Math.random() * TAU;
+    sizes[index] = 0.52 + point.alpha * 0.88 + Math.random() * 0.12;
+    seeds[index] = Math.random() * 100;
+
+    if (coolAccent) {
+      color.setRGB(0.62, 0.84, 1);
+    } else {
+      color.setRGB(1, 0.94 - warmMix * 0.12, 0.88 - warmMix * 0.28);
+    }
+
+    color.toArray(customColors, offset);
+  });
+
+  const geometry = new THREE.BufferGeometry();
+  const displacementAttribute = new THREE.Float32BufferAttribute(displacements, 3);
+  displacementAttribute.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("displacement", displacementAttribute);
+  geometry.setAttribute("customColor", new THREE.Float32BufferAttribute(customColors, 3));
+  geometry.setAttribute("aSize", new THREE.Float32BufferAttribute(sizes, 1));
+  geometry.setAttribute("aSeed", new THREE.Float32BufferAttribute(seeds, 1));
+  geometry.userData = { baseDisplacements, phases, canvasAspect };
+
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      amplitude: { value: 0 },
+      opacity: { value: reducedMotion ? 0.86 : 0.98 },
+      uPixelRatio: { value: 1 },
+      uTime: { value: 0 },
+      color: { value: new THREE.Color(0xfff0d0) }
+    },
+    vertexShader: heroParticleVertexShader,
+    fragmentShader: heroParticleFragmentShader,
+    blending: THREE.AdditiveBlending,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true
+  });
+
+  const particles = new THREE.Points(geometry, material);
+  particles.frustumCulled = false;
+  particles.renderOrder = 2;
+  particles.userData = {
+    reducedMotion,
+    hoveringHero: false,
+    pointerActive: false,
+    pointerStrength: 0,
+    pointerX: 0,
+    pointerY: 0,
+    targetPointerX: 0,
+    targetPointerY: 0
+  };
   return particles;
 }
 
@@ -815,6 +1027,11 @@ function createNodeGroup(layout) {
 
 export function createSingularityScene({
   canvas,
+  profile = {
+    location: "",
+    name: "",
+    headline: ""
+  },
   sections,
   onNodeSelect,
   reducedMotion = false,
@@ -840,6 +1057,10 @@ export function createSingularityScene({
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 140);
   camera.position.set(0, 1.1, reducedMotion ? 12 : 18);
+  scene.add(camera);
+
+  const heroParticleText = createHeroParticleText(profile, { reducedMotion });
+  camera.add(heroParticleText);
 
   const bloomRenderPass = new RenderPass(scene, camera);
   const finalRenderPass = new RenderPass(scene, camera);
@@ -949,7 +1170,7 @@ export function createSingularityScene({
   relativisticSingularity.layers.enable(BLOOM_LAYER);
   singularity.add(relativisticSingularity);
 
-  const accretionDust = createAccretionDust(getBudget("accretionDust", reducedMotion));
+  const accretionDust = createAccretionDust(getBudget("accretionDust", reducedMotion), reducedMotion);
   accretionDust.rotation.x = DISK_PLANE_TILT;
   accretionDust.layers.enable(BLOOM_LAYER);
   scene.add(accretionDust);
@@ -1012,6 +1233,45 @@ export function createSingularityScene({
     updateParticleHorizonUniforms(mask);
   }
 
+  function updateHeroParticleTextLayout(width = window.innerWidth, height = window.innerHeight) {
+    const heroRect = root.querySelector?.(".hero-copy")?.getBoundingClientRect();
+    const depth = 9.25;
+    const viewHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5) * depth;
+    const viewWidth = viewHeight * camera.aspect;
+    const fallbackWidth = isMobileViewport() ? Math.min(width - 28, 370) : Math.min(width * 0.5, 680);
+    const fieldWidth = heroRect
+      ? isMobileViewport()
+        ? Math.min(heroRect.width * 0.98, width * 0.94)
+        : Math.min(heroRect.width * 1.08, width * 0.58)
+      : fallbackWidth;
+    const centerX = heroRect ? heroRect.left + heroRect.width * 0.5 : width * 0.22;
+    const centerY = heroRect ? heroRect.top + heroRect.height * 0.48 : height * 0.18;
+
+    heroParticleText.position.set(
+      (centerX / width - 0.5) * viewWidth,
+      (0.5 - centerY / height) * viewHeight,
+      -depth
+    );
+    heroParticleText.scale.set(
+      (fieldWidth / width) * viewWidth,
+      (fieldWidth / width) * viewWidth,
+      1
+    );
+    heroParticleText.userData.screenRect = heroRect
+      ? {
+        left: heroRect.left,
+        right: heroRect.right,
+        top: heroRect.top,
+        bottom: heroRect.bottom
+      }
+      : {
+        left: 0,
+        right: fallbackWidth,
+        top: 0,
+        bottom: height * 0.34
+      };
+  }
+
   function resize() {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -1031,7 +1291,9 @@ export function createSingularityScene({
     cinematicPass.uniforms.uResolution.value.set(width * composerPixelRatio, height * composerPixelRatio);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    updateHeroParticleTextLayout(width, height);
     updateHorizonMaskUniforms(width, height);
+    heroParticleText.material.uniforms.uPixelRatio.value = pixelRatio;
 
     for (const points of [starField, accretionDust, burstParticles, contactParticles]) {
       points.material.uniforms.uPixelRatio.value = pixelRatio;
@@ -1046,6 +1308,65 @@ export function createSingularityScene({
     burstParticles.material.uniforms.uTime.value = elapsed;
     contactParticles.material.uniforms.uTime.value = elapsed;
     cinematicPass.uniforms.uTime.value = elapsed;
+  }
+
+  function updateHeroParticleText(elapsed) {
+    const attributes = heroParticleText.geometry.attributes;
+    const positions = attributes.position.array;
+    const array = attributes.displacement.array;
+    const { baseDisplacements, phases } = heroParticleText.geometry.userData;
+    const pointerTargetStrength = heroParticleText.userData.pointerActive && !activeSectionId ? 1 : 0;
+    heroParticleText.userData.pointerStrength += (pointerTargetStrength - heroParticleText.userData.pointerStrength) * (pointerTargetStrength ? 0.18 : 0.1);
+    heroParticleText.userData.pointerX += (heroParticleText.userData.targetPointerX - heroParticleText.userData.pointerX) * 0.26;
+    heroParticleText.userData.pointerY += (heroParticleText.userData.targetPointerY - heroParticleText.userData.pointerY) * 0.26;
+    const heroDiffusionEnvelope = heroParticleText.userData.pointerStrength;
+    const diffusionAmplitude = reducedMotion ? 0.02 : 0.14;
+    const targetOpacity = activeSectionId ? 0.32 : isMobileViewport() ? 0.86 : 0.94;
+
+    heroParticleText.material.uniforms.opacity.value += (targetOpacity - heroParticleText.material.uniforms.opacity.value) * 0.18;
+    heroParticleText.material.uniforms.amplitude.value = heroDiffusionEnvelope * diffusionAmplitude;
+    heroParticleText.material.uniforms.uTime.value = elapsed;
+    heroParticleText.material.uniforms.color.value.offsetHSL(heroDiffusionEnvelope * 0.00018, 0, 0);
+
+    for (let i = 0; i < phases.length; i += 1) {
+      const offset = i * 3;
+      const pointerDeltaX = positions[offset] - heroParticleText.userData.pointerX;
+      const pointerDeltaY = positions[offset + 1] - heroParticleText.userData.pointerY;
+      const localRippleDistance = Math.hypot(pointerDeltaX, pointerDeltaY);
+      const rippleFalloff = Math.exp(-Math.pow(localRippleDistance / 0.095, 2));
+      const rippleDirectionX = pointerDeltaX / Math.max(0.001, localRippleDistance);
+      const rippleDirectionY = pointerDeltaY / Math.max(0.001, localRippleDistance);
+      const waterRipple = Math.sin(localRippleDistance * 52 - elapsed * 12 + phases[i] * 0.35) * rippleFalloff;
+      const drift = Math.sin(elapsed * 2.6 + phases[i]) * 0.5 + 0.5;
+      const ripplePush = waterRipple * (0.036 + drift * 0.018);
+      array[offset] = baseDisplacements[offset] * (0.06 + rippleFalloff * (0.22 + drift * 0.12)) + rippleDirectionX * ripplePush;
+      array[offset + 1] = baseDisplacements[offset + 1] * (0.06 + rippleFalloff * (0.24 + drift * 0.13)) + rippleDirectionY * ripplePush * 0.72;
+      array[offset + 2] = baseDisplacements[offset + 2] * (0.04 + rippleFalloff * (0.18 + drift * 0.08)) + waterRipple * 0.018;
+    }
+
+    attributes.displacement.needsUpdate = true;
+  }
+
+  function updateHeroParticleDiffusionFromPointer(event) {
+    const heroRect = heroParticleText.userData.screenRect ?? root.querySelector?.(".hero-copy")?.getBoundingClientRect();
+    const isInsideHero = Boolean(
+      heroRect &&
+        event.clientX >= heroRect.left &&
+        event.clientX <= heroRect.right &&
+        event.clientY >= heroRect.top &&
+        event.clientY <= heroRect.bottom
+    );
+
+    if (isInsideHero && !reducedMotion) {
+      const pointerLocalX = (event.clientX - heroRect.left) / Math.max(1, heroRect.right - heroRect.left);
+      const pointerLocalY = (event.clientY - heroRect.top) / Math.max(1, heroRect.bottom - heroRect.top);
+      const canvasAspect = heroParticleText.geometry.userData.canvasAspect;
+      heroParticleText.userData.targetPointerX = clamp(pointerLocalX, 0, 1) - 0.5;
+      heroParticleText.userData.targetPointerY = (0.5 - clamp(pointerLocalY, 0, 1)) * canvasAspect;
+    }
+
+    heroParticleText.userData.pointerActive = isInsideHero && !reducedMotion;
+    heroParticleText.userData.hoveringHero = isInsideHero;
   }
 
   function updateNodeButtons(elapsed) {
@@ -1114,24 +1435,33 @@ export function createSingularityScene({
   function updateAccretionDust(elapsed) {
     const geometry = accretionDust.geometry;
     const positions = geometry.getAttribute("position");
-    const { radii, speeds, layers, directions, topFeeds } = geometry.userData;
+    const sizes = geometry.getAttribute("aSize");
+    const { radii, speeds, layers, directions, topFeeds, baseSizes, wakeBands, wakePhases, wakeWeights } = geometry.userData;
     const activeBoost = accretionDust.material.uniforms.uContactBoost.value;
 
     for (let i = 0; i < positions.count; i += 1) {
       const offset = i * 3;
       const feed = topFeeds[i];
+      const wakeBand = wakeBands[i];
+      const wakeWave = Math.sin(elapsed * (0.62 + speeds[i] * 2.4) + wakePhases[i] + wakeBand * TAU * 2.4) * 0.5 + 0.5;
+      const wakeCrossWave = Math.sin(elapsed * 0.38 - wakePhases[i] * 0.74 + wakeBand * TAU * 5.0) * 0.5 + 0.5;
+      const wakeLaneOffset = (wakeBand - 0.5) * (feed ? 0.24 : 0.09) + (wakeWave - 0.5) * (feed ? 0.13 : 0.055) * wakeWeights[i];
       const spiral = (elapsed * speeds[i] * (0.35 + activeBoost * 0.4) + i * 0.013) % 1;
-      const radius = radii[i] * (1 - spiral * (0.34 + activeBoost * 0.18 + feed * 0.22));
-      const angle = directions[i] * (elapsed * speeds[i] + spiral * (5.8 + feed * 2.2)) + i * 0.37;
+      const radius = radii[i]
+        * (1 - spiral * (0.34 + activeBoost * 0.18 + feed * 0.22))
+        * (1 + (wakeWave - 0.5) * 0.07 * wakeWeights[i]);
+      const angle = directions[i] * (elapsed * speeds[i] + spiral * (5.8 + feed * 2.2) + (wakeCrossWave - 0.5) * 0.32 * wakeWeights[i]) + i * 0.37;
       const vertical = feed
-        ? layers[i] * (1 - spiral * 0.74) + Math.sin(angle * 2.1 + elapsed * 1.2) * 0.055
-        : layers[i] + Math.sin(angle * 1.8 + elapsed) * 0.035;
+        ? layers[i] * (1 - spiral * 0.74) + wakeLaneOffset + Math.sin(angle * 2.1 + elapsed * 1.2) * 0.038
+        : layers[i] + wakeLaneOffset + Math.sin(angle * 1.8 + elapsed) * 0.022;
       positions.array[offset] = Math.cos(angle) * radius;
       positions.array[offset + 1] = vertical;
       positions.array[offset + 2] = Math.sin(angle) * radius * (feed ? 0.52 : 0.68);
+      sizes.array[i] = baseSizes[i] * (0.78 + wakeWave * 0.44 + wakeCrossWave * 0.16 + activeBoost * 0.18);
     }
 
     positions.needsUpdate = true;
+    sizes.needsUpdate = true;
   }
 
   function triggerBurst(sectionId) {
@@ -1306,6 +1636,7 @@ export function createSingularityScene({
     updateDeviceTiltParallax();
     updateHorizonMaskUniforms();
     updateShaderUniforms(elapsed);
+    updateHeroParticleText(elapsed);
     updateNodeMeshes(elapsed);
     updateAccretionDust(elapsed);
     updateBurstParticles(elapsed);
@@ -1407,6 +1738,7 @@ export function createSingularityScene({
   }
 
   function handlePointerMove(event) {
+    updateHeroParticleDiffusionFromPointer(event);
     const rect = canvas.getBoundingClientRect();
     pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -1438,6 +1770,13 @@ export function createSingularityScene({
     }
   }
 
+  function handlePointerLeave() {
+    heroParticleText.userData.hoveringHero = false;
+    heroParticleText.userData.pointerActive = false;
+    hoveredId = null;
+    canvas.style.cursor = "default";
+  }
+
   function start() {
     if (running) return;
     running = true;
@@ -1457,6 +1796,7 @@ export function createSingularityScene({
     }
 
     canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerleave", handlePointerLeave);
     canvas.addEventListener("click", handleClick);
     window.addEventListener("resize", resize);
     renderFrame();
@@ -1473,6 +1813,7 @@ export function createSingularityScene({
   function dispose() {
     stop();
     canvas.removeEventListener("pointermove", handlePointerMove);
+    canvas.removeEventListener("pointerleave", handlePointerLeave);
     canvas.removeEventListener("click", handleClick);
     window.removeEventListener("resize", resize);
     gsap.killTweensOf(camera.position);

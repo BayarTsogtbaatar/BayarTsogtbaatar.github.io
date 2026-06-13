@@ -337,6 +337,7 @@ async function startScene() {
     const { createSingularityScene } = await loadSceneModule();
     sceneController = createSingularityScene({
       canvas,
+      profile: PROFILE,
       sections,
       reducedMotion: state.reducedMotion,
       root: document.documentElement,

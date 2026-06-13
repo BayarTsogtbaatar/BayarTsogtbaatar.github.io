@@ -153,8 +153,8 @@ test("accretion disk shader uses lava-inspired advected plasma noise without lav
 test("particle budgets scale down on mobile and reduced motion", () => {
   assert.ok(PARTICLE_BUDGETS.starfield.desktop > PARTICLE_BUDGETS.starfield.mobile);
   assert.ok(PARTICLE_BUDGETS.accretionDust.desktop > PARTICLE_BUDGETS.accretionDust.mobile);
-  assert.ok(PARTICLE_BUDGETS.accretionDust.desktop <= 760);
-  assert.ok(PARTICLE_BUDGETS.accretionDust.mobile <= 280);
+  assert.ok(PARTICLE_BUDGETS.accretionDust.desktop <= 700);
+  assert.ok(PARTICLE_BUDGETS.accretionDust.mobile <= 240);
   assert.ok(PARTICLE_BUDGETS.sectionBurst.desktop > PARTICLE_BUDGETS.sectionBurst.mobile);
   assert.ok(PARTICLE_BUDGETS.reducedMotionMultiplier < 1);
 });
@@ -278,13 +278,13 @@ test("orbit node cards stay visually lighter than the singularity", () => {
 test("hero title stack keeps the name, headline, and tags separated", () => {
   const css = readFileSync("src/styles.css", "utf8");
   const normalizedCss = css.replaceAll("\r\n", "\n");
-  assert.ok(css.includes("font-size: 7.25rem;"));
+  assert.ok(css.includes("font-size: 8.7rem;"));
   assert.ok(css.includes("line-height: 0.95;"));
   assert.ok(normalizedCss.includes(".profile-headline {\n  margin-top: 0.95rem;"));
   assert.ok(css.includes("line-height: 1.18;"));
   assert.ok(css.includes("@media (max-width: 1100px)"));
-  assert.ok(css.includes("font-size: 5.8rem;"));
-  assert.ok(css.includes("font-size: 3.35rem;"));
+  assert.ok(css.includes("font-size: 6.7rem;"));
+  assert.ok(css.includes("font-size: 3.85rem;"));
 });
 
 test("mobile orbit stack is placed below the hero copy with compact spacing", () => {
@@ -595,7 +595,7 @@ test("particle shader masks point sprites against the projected event horizon", 
     "ndcPosition.z - uHorizonOccluderDepth",
     "float hardHorizon = (1.0 - smoothstep(0.56, 0.72, normalizedHorizonDistance)) * behindHorizon;",
     "float horizonOcclusion = clamp(max(hardHorizon, softHorizon), 0.0, 1.0);",
-    "vAlpha = uFade * (0.58 + twinkle * 0.42) * horizonVisibility;",
+    "vAlpha = uFade * (0.58 + twinkle * 0.42) * mix(1.0, 0.72 + wakeWave * 0.52, uWakeStrength) * horizonVisibility;",
     "points.material.uniforms.uHorizonCenter.value.copy(mask.center)",
     "points.material.uniforms.uHorizonOccluderDepth.value = mask.occluderDepth",
     "uHorizonDepth: { value: 0 }",
@@ -700,8 +700,8 @@ test("singularity shader and dust make the upper arc feed heavier plasma into th
     "upperFeedColor",
     "denseHorizonDust",
     "topFeedBias",
-    "radii[i] = topFeedBias ? 1.28 + Math.random() * 2.85 : 1.62 + Math.random() * 3.65",
-    "layers[i] = topFeedBias ? 0.18 + Math.random() * 0.46 : (Math.random() - 0.5) * 0.16",
+    "radii[i] = topFeedBias",
+    "layers[i] = topFeedBias ? 0.18 + bandProgress * 0.38 + Math.random() * 0.1 : bandCenter * 0.18 + (Math.random() - 0.5) * 0.045",
     "createParticleMaterial({ opacity: 0.26 })"
   ]) {
     assert.ok(source.includes(fragment), `Missing heavier upper-feed fragment ${fragment}`);
@@ -715,9 +715,34 @@ test("accretion dust stays warm and controlled instead of confetti-like", () => 
     "const smoke = colorToArray(\"#6d1f19\")",
     "sizes[i] = 0.16 + Math.random() * 0.42",
     "createParticleMaterial({ opacity: 0.26 })",
-    "layers[i] = topFeedBias ? 0.18 + Math.random() * 0.46 : (Math.random() - 0.5) * 0.16"
+    "layers[i] = topFeedBias ? 0.18 + bandProgress * 0.38 + Math.random() * 0.1 : bandCenter * 0.18 + (Math.random() - 0.5) * 0.045"
   ]) {
     assert.ok(source.includes(fragment), `Missing subtle plasma dust fragment ${fragment}`);
+  }
+});
+
+test("accretion dust uses structured point-field wake animation", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "const ACCRETION_WAKE_BAND_COUNT",
+    "attribute float aWakeBand",
+    "attribute float aWakePhase",
+    "uniform float uWakeStrength",
+    "geometry.setAttribute(\"aWakeBand\"",
+    "geometry.setAttribute(\"aWakePhase\"",
+    "const baseSizes = new Float32Array(count)",
+    "const wakeBands = new Float32Array(count)",
+    "const wakePhases = new Float32Array(count)",
+    "const wakeWeights = new Float32Array(count)",
+    "positionAttribute.setUsage(THREE.DynamicDrawUsage)",
+    "sizeAttribute.setUsage(THREE.DynamicDrawUsage)",
+    "wakeBand = wakeBands[i]",
+    "wakeWave",
+    "wakeLaneOffset",
+    "sizes.array[i]",
+    "sizes.needsUpdate = true"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing structured dust field fragment ${fragment}`);
   }
 });
 
@@ -756,6 +781,62 @@ test("portfolio orbit guides stay subdued behind the cinematic singularity", () 
   assert.ok(source.includes("opacity: 0.18"));
 });
 
+test("scene renders the top-left profile as hover-reactive particle text", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "const heroParticleVertexShader",
+    "uniform float amplitude",
+    "attribute vec3 displacement",
+    "attribute vec3 customColor",
+    "vec3 newPosition = position + amplitude * displacement",
+    "const heroParticleFragmentShader",
+    "vColor * color",
+    "function createHeroParticleText",
+    "document.createElement(\"canvas\")",
+    "context.getImageData",
+    "profile.name",
+    "profile.headline",
+    "const maxParticles = reducedMotion ? 4200 : 14500",
+    "const sampleStep = reducedMotion ? 2 : 1",
+    "new THREE.Float32BufferAttribute",
+    "geometry.setAttribute(\"displacement\"",
+    "geometry.setAttribute(\"customColor\"",
+    "displacementAttribute.setUsage(THREE.DynamicDrawUsage)",
+    "new THREE.Points(geometry, material)",
+    "blending: THREE.AdditiveBlending",
+    "depthTest: false",
+    "function updateHeroParticleTextLayout",
+    "root.querySelector?.(\".hero-copy\")",
+    "Math.min(heroRect.width * 0.98, width * 0.94)",
+    "function updateHeroParticleText",
+    "function updateHeroParticleDiffusionFromPointer",
+    "heroParticleText.userData.targetPointerX",
+    "heroParticleText.userData.targetPointerY",
+    "heroParticleText.userData.pointerStrength",
+    "const heroDiffusionEnvelope = heroParticleText.userData.pointerStrength",
+    "const diffusionAmplitude = reducedMotion ? 0.02 : 0.14",
+    "const localRippleDistance",
+    "const rippleFalloff",
+    "const waterRipple",
+    "heroParticleText.material.uniforms.amplitude.value = heroDiffusionEnvelope * diffusionAmplitude",
+    "attributes.displacement.needsUpdate = true",
+    "camera.add(heroParticleText)",
+    "canvas.addEventListener(\"pointerleave\", handlePointerLeave)"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing particle hero text fragment ${fragment}`);
+  }
+  assert.equal(source.includes("FontLoader"), false);
+  assert.equal(source.includes("TextGeometry"), false);
+  assert.equal(source.includes("function pulseHeroParticleDiffusion"), false);
+});
+
+test("CSS hides the DOM hero copy when WebGL particle text is ready", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.ok(css.includes(".app-shell.is-scene-ready .hero-copy"));
+  assert.ok(css.includes("opacity: 0;"));
+  assert.ok(css.includes(".app-shell.webgl-fallback .hero-copy"));
+});
+
 test("main app imports styles, content, state, and UI modules", () => {
   const source = readFileSync("src/main.js", "utf8");
   for (const fragment of [
@@ -771,6 +852,7 @@ test("main app imports styles, content, state, and UI modules", () => {
 test("main app lazy-loads the heavy Three.js scene module", () => {
   const source = readFileSync("src/main.js", "utf8");
   assert.ok(source.includes('import("./scene.js")'));
+  assert.ok(source.includes("profile: PROFILE"));
   assert.ok(source.includes("root: document.documentElement"));
   assert.equal(source.includes('from "./scene.js"'), false);
 });

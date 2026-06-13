@@ -82,8 +82,8 @@ export const PARTICLE_BUDGETS = {
     mobile: PERFORMANCE_LIMITS.mobileStars
   },
   accretionDust: {
-    desktop: 760,
-    mobile: 280
+    desktop: 680,
+    mobile: 230
   },
   sectionBurst: {
     desktop: 360,

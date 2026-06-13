@@ -182,8 +182,17 @@ a {
   left: clamp(1rem, 4vw, 4.5rem);
   top: clamp(1rem, 5vh, 4rem);
   z-index: 4;
-  width: min(34rem, calc(100vw - 2rem));
+  width: min(42rem, calc(100vw - 2rem));
   pointer-events: none;
+  transition: opacity 280ms var(--ease);
+}
+
+.app-shell.is-scene-ready .hero-copy {
+  opacity: 0;
+}
+
+.app-shell.webgl-fallback .hero-copy {
+  opacity: 1;
 }
 
 .profile-location,
@@ -206,14 +215,14 @@ a {
 
 h1 {
   margin: 0.55rem 0 0;
-  font-size: 7.25rem;
+  font-size: 8.7rem;
   line-height: 0.95;
   letter-spacing: 0;
 }
 
 .profile-headline {
   margin-top: 0.95rem;
-  font-size: 1.35rem;
+  font-size: 1.62rem;
   line-height: 1.18;
   font-weight: 800;
   color: rgba(247, 251, 255, 0.94);
@@ -598,7 +607,7 @@ html.is-distorting .orbit-node-button {
 
 @media (max-width: 1100px) {
   h1 {
-    font-size: 5.8rem;
+    font-size: 6.7rem;
   }
 }
 
@@ -616,13 +625,13 @@ html.is-distorting .orbit-node-button {
 
   h1 {
     margin-top: 0.5rem;
-    font-size: 3.35rem;
+    font-size: 3.85rem;
     line-height: 0.98;
   }
 
   .profile-headline {
     margin-top: 0.75rem;
-    font-size: 1.16rem;
+    font-size: 1.22rem;
     line-height: 1.22;
   }
 
