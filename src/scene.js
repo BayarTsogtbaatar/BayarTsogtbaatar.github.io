@@ -377,9 +377,13 @@ const cinematicPostShader = {
     uHorizonRadius: { value: 0.1 },
     uHorizonShadow: { value: 0.24 },
     uSceneTransition: { value: 0 },
+    uScrollTransition: { value: 0 },
+    uScrollDirection: { value: 1 },
     uTransitionCenter: { value: new THREE.Vector2(0.5, 0.5) },
     uTransitionSeed: { value: 1 },
     uTransitionDisplacement: { value: POST_PROCESSING.shaderPass.transitionDisplacement },
+    uScrollDisplacement: { value: POST_PROCESSING.shaderPass.scrollDisplacement },
+    uScrollThreshold: { value: POST_PROCESSING.shaderPass.scrollThreshold },
     uAspect: { value: 1 }
   },
   vertexShader: `
@@ -402,9 +406,13 @@ const cinematicPostShader = {
     uniform float uHorizonRadius;
     uniform float uHorizonShadow;
     uniform float uSceneTransition;
+    uniform float uScrollTransition;
+    uniform float uScrollDirection;
     uniform vec2 uTransitionCenter;
     uniform float uTransitionSeed;
     uniform float uTransitionDisplacement;
+    uniform float uScrollDisplacement;
+    uniform float uScrollThreshold;
     uniform float uAspect;
 
     varying vec2 vUv;
@@ -423,9 +431,18 @@ const cinematicPostShader = {
       float transitionWidth = 0.035 + transitionProgress * 0.045;
       float transitionRing = exp(-pow((transitionDistance - transitionProgress * 0.96) / transitionWidth, 2.0)) * transitionActive;
       float frostNoise = random(floor(vUv * uResolution.xy * 0.035 + uTransitionSeed));
+      float scrollProgress = smoothstep(0.0, 1.0, clamp(uScrollTransition, 0.0, 1.0));
+      float scrollTransitionActive = smoothstep(0.02, 0.18, scrollProgress) * (1.0 - smoothstep(0.82, 0.98, scrollProgress));
+      float scrollSettledField = scrollProgress * (1.0 - scrollTransitionActive * 0.55);
+      float scrollTransitionNoise = random(floor((vUv + vec2(uTime * 0.013, -uTime * 0.009)) * uResolution.xy * 0.018 + uTransitionSeed * 0.37));
+      float scrollThresholdEdge = scrollProgress - scrollTransitionNoise * 0.32 - (0.48 - vUv.y) * 0.2 * uScrollDirection;
+      float scrollTransitionMask = smoothstep(-uScrollThreshold, uScrollThreshold, scrollThresholdEdge) * scrollTransitionActive;
+      float scrollWarmStreak = exp(-pow((vUv.y - (0.51 + centered.x * 0.06)) / (0.055 + scrollProgress * 0.05), 2.0)) * max(scrollTransitionMask, scrollSettledField * 0.24);
       vec2 transitionDirection = normalize(transitionDelta + vec2(0.0001));
       float techDisplacement = transitionRing * uTransitionDisplacement * (0.62 + frostNoise * 0.76);
-      vec2 lensUv = vUv + centered * radius * uLens + transitionDirection * techDisplacement;
+      vec2 scrollDirection = normalize(centered * vec2(uAspect, 0.72) + vec2(0.0001));
+      vec2 scrollWarp = scrollDirection * uScrollDisplacement * (scrollTransitionMask * (0.36 + scrollTransitionNoise * 0.72) + scrollSettledField * 0.08);
+      vec2 lensUv = vUv + centered * radius * uLens + transitionDirection * techDisplacement + scrollWarp;
       vec2 direction = normalize(centered + vec2(0.0001)) * (uAberration + transitionRing * 0.0036);
       float red = texture2D(tDiffuse, lensUv + direction).r;
       float green = texture2D(tDiffuse, lensUv).g;
@@ -438,6 +455,8 @@ const cinematicPostShader = {
       color = color * mix(1.0, vignette, uVignette) + grainNoise * grainMask;
       vec3 transitionTint = mix(vec3(1.0, 0.68, 0.32), vec3(0.72, 0.86, 1.0), frostNoise);
       color = mix(color, transitionTint, transitionRing * (0.12 + frostNoise * 0.08));
+      vec3 scrollTint = vec3(1.0, 0.48, 0.16) * scrollWarmStreak * (0.13 + scrollTransitionNoise * 0.06);
+      color = mix(color, color * (0.96 + scrollWarmStreak * 0.12) + scrollTint, clamp(scrollTransitionMask * 0.48 + scrollSettledField * 0.1, 0.0, 0.5));
       vec2 horizonDelta = (vUv - uHorizonCenter) * vec2(uAspect, 1.0);
       float horizonDistance = length(horizonDelta);
       float horizonInner = uHorizonRadius * 0.24;
@@ -1114,6 +1133,11 @@ export function createSingularityScene({
   let running = false;
   let rafId = 0;
   let lastElapsed = 0;
+  let lastCanvasClientWidth = 0;
+  let lastCanvasClientHeight = 0;
+  let resizeObserver = null;
+  let resizePoller = 0;
+  let scrollTransitionTarget = 0;
   const horizonWorldCenter = new THREE.Vector3();
   const transitionProjection = new THREE.Vector3();
   let currentHorizonMask = null;
@@ -1278,6 +1302,8 @@ export function createSingularityScene({
     const pixelRatio = Math.min(window.devicePixelRatio || 1, PERFORMANCE_LIMITS.maxPixelRatio);
     const composerPixelRatio = pixelRatio * currentComposerScale();
     const activeBloom = currentBloomProfile();
+    lastCanvasClientWidth = canvas.clientWidth || width;
+    lastCanvasClientHeight = canvas.clientHeight || height;
 
     renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width, height, false);
@@ -1298,6 +1324,24 @@ export function createSingularityScene({
     for (const points of [starField, accretionDust, burstParticles, contactParticles]) {
       points.material.uniforms.uPixelRatio.value = pixelRatio;
     }
+  }
+
+  function resizeIfCanvasBoundsChanged() {
+    const clientWidth = canvas.clientWidth || window.innerWidth;
+    const clientHeight = canvas.clientHeight || window.innerHeight;
+
+    if (Math.abs(clientWidth - lastCanvasClientWidth) > 1 || Math.abs(clientHeight - lastCanvasClientHeight) > 1) {
+      resize();
+    }
+  }
+
+  function observeCanvasResize() {
+    if (resizeObserver || typeof ResizeObserver === "undefined") return;
+
+    resizeObserver = new ResizeObserver(() => {
+      resize();
+    });
+    resizeObserver.observe(canvas);
   }
 
   function updateShaderUniforms(elapsed) {
@@ -1321,7 +1365,8 @@ export function createSingularityScene({
     heroParticleText.userData.pointerY += (heroParticleText.userData.targetPointerY - heroParticleText.userData.pointerY) * 0.26;
     const heroDiffusionEnvelope = heroParticleText.userData.pointerStrength;
     const diffusionAmplitude = reducedMotion ? 0.02 : 0.14;
-    const targetOpacity = activeSectionId ? 0.32 : isMobileViewport() ? 0.86 : 0.94;
+    const scrollTitleFade = 1 - cinematicPass.uniforms.uScrollTransition.value * (isMobileViewport() ? 0.78 : 0.18);
+    const targetOpacity = (activeSectionId ? 0.32 : isMobileViewport() ? 0.86 : 0.94) * scrollTitleFade;
 
     heroParticleText.material.uniforms.opacity.value += (targetOpacity - heroParticleText.material.uniforms.opacity.value) * 0.18;
     heroParticleText.material.uniforms.amplitude.value = heroDiffusionEnvelope * diffusionAmplitude;
@@ -1390,9 +1435,10 @@ export function createSingularityScene({
       const depthOpacity = projected.z > 1 ? 0.18 : 0.58 + Math.max(0, group.position.z / 13);
       const horizonVisibility = group.userData.horizonVisibility ?? 1;
       const connectorVisibility = Math.pow(horizonVisibility, 1.8);
+      const scrollLabelBoost = 1 + cinematicPass.uniforms.uScrollTransition.value * 0.16;
       const labelVisibility = activeSectionId && activeSectionId !== id
         ? 0.16
-        : clamp(depthOpacity * (0.58 + horizonVisibility * 0.42), 0.28, 0.92);
+        : clamp(depthOpacity * (0.58 + horizonVisibility * 0.42) * scrollLabelBoost, 0.28, 0.96);
 
       button.style.setProperty("--node-x", `${x}px`);
       button.style.setProperty("--node-y", `${y}px`);
@@ -1540,6 +1586,29 @@ export function createSingularityScene({
     contactParticles.rotation.y = elapsed * 0.25;
   }
 
+  function updateScrollCinematicTargets() {
+    const progress = clamp(cinematicPass.uniforms.uScrollTransition.value, 0, 1);
+    const scrollOrbitEase = smoothstep(0, 1, progress);
+    const scrollParallax = reducedMotion ? 0 : scrollOrbitEase;
+    const mobile = isMobileViewport();
+
+    if (!activeSectionId && scrollParallax > 0.001) {
+      camera.position.x = 0;
+      camera.position.y = 1.1 - scrollParallax * (mobile ? 0.18 : 0.32);
+      camera.position.z = 11.5 - scrollParallax * (mobile ? 1.1 : 2.25);
+    }
+
+    singularity.position.y = scrollParallax * (mobile ? 0.1 : 0.18);
+    singularity.scale.setScalar(1 + scrollParallax * (mobile ? 0.035 : 0.06));
+    accretionDust.scale.setScalar(1 + scrollParallax * 0.035);
+    accretionDust.material.uniforms.uWakeStrength.value = (reducedMotion ? 0.18 : 0.58) + scrollParallax * 0.18;
+
+    if (!activeSectionId) {
+      const bloomProfile = currentBloomProfile();
+      bloomPass.strength = bloomProfile.strength + scrollParallax * (mobile ? 0.025 : 0.055);
+    }
+  }
+
   function setDeviceTilt({
     x = deviceTilt.targetX,
     y = deviceTilt.targetY,
@@ -1620,6 +1689,34 @@ export function createSingularityScene({
     });
   }
 
+  function setScrollTransition(targetProgress = 0, { immediate = false, direction = targetProgress >= scrollTransitionTarget ? 1 : -1 } = {}) {
+    const progress = clamp(targetProgress, 0, 1);
+    scrollTransitionTarget = progress;
+    cinematicPass.uniforms.uScrollDirection.value = direction < 0 ? -1 : 1;
+    gsap.killTweensOf(cinematicPass.uniforms.uScrollTransition);
+    root.classList?.toggle("is-scroll-transitioning", !immediate && !reducedMotion);
+    cinematicPass.uniforms.uTransitionSeed.value = Math.random() * 1000;
+
+    if (immediate || reducedMotion) {
+      cinematicPass.uniforms.uScrollTransition.value = progress;
+      updateScrollCinematicTargets();
+      root.classList?.remove("is-scroll-transitioning");
+      return;
+    }
+
+    gsap.to(cinematicPass.uniforms.uScrollTransition, {
+      value: progress,
+      duration: TRANSITIONS.scrollMs / 1000,
+      ease: "power3.inOut",
+      onUpdate: updateScrollCinematicTargets,
+      onComplete: () => {
+        cinematicPass.uniforms.uScrollTransition.value = progress;
+        updateScrollCinematicTargets();
+        root.classList?.remove("is-scroll-transitioning");
+      }
+    });
+  }
+
   function renderFrame(timestamp) {
     if (!running) return;
     rafId = window.requestAnimationFrame(renderFrame);
@@ -1629,10 +1726,12 @@ export function createSingularityScene({
     const delta = timer.getDelta();
     lastElapsed = elapsed;
 
+    resizeIfCanvasBoundsChanged();
     singularity.rotation.y = SINGULARITY_VIEW_TILT.y + Math.sin(elapsed * 0.2) * (reducedMotion ? 0.006 : 0.018);
     starField.rotation.y = elapsed * (reducedMotion ? 0.0015 : 0.009);
     starField.rotation.x = Math.sin(elapsed * 0.08) * 0.02;
 
+    updateScrollCinematicTargets();
     updateDeviceTiltParallax();
     updateHorizonMaskUniforms();
     updateShaderUniforms(elapsed);
@@ -1799,6 +1898,8 @@ export function createSingularityScene({
     canvas.addEventListener("pointerleave", handlePointerLeave);
     canvas.addEventListener("click", handleClick);
     window.addEventListener("resize", resize);
+    observeCanvasResize();
+    resizePoller = window.setInterval(resizeIfCanvasBoundsChanged, 250);
     renderFrame();
   }
 
@@ -1816,10 +1917,19 @@ export function createSingularityScene({
     canvas.removeEventListener("pointerleave", handlePointerLeave);
     canvas.removeEventListener("click", handleClick);
     window.removeEventListener("resize", resize);
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+      resizeObserver = null;
+    }
+    if (resizePoller) {
+      window.clearInterval(resizePoller);
+      resizePoller = 0;
+    }
     gsap.killTweensOf(camera.position);
     gsap.killTweensOf(camera.rotation);
     gsap.killTweensOf(singularity.rotation);
     gsap.killTweensOf(cinematicPass.uniforms.uSceneTransition);
+    gsap.killTweensOf(cinematicPass.uniforms.uScrollTransition);
     timer.dispose();
     bloomComposer.dispose();
     finalComposer.dispose();
@@ -1840,6 +1950,7 @@ export function createSingularityScene({
     resize,
     setHoveredSection,
     setDeviceTilt,
+    setScrollTransition,
     selectSection,
     focusSection,
     returnToOrbit,

@@ -168,8 +168,13 @@ test("transition config includes Igloo-inspired effects", () => {
     "gravitational-warp",
     "frost-dissolve"
   ]);
+  assert.ok(TRANSITIONS.scrollMs > 0);
+  assert.ok(TRANSITIONS.scrollGestureThreshold >= 40);
   assert.ok(POST_PROCESSING.shaderPass.transitionDisplacement > 0);
   assert.ok(POST_PROCESSING.shaderPass.transitionDisplacement <= 0.02);
+  assert.ok(POST_PROCESSING.shaderPass.scrollDisplacement > POST_PROCESSING.shaderPass.transitionDisplacement);
+  assert.ok(POST_PROCESSING.shaderPass.scrollThreshold > 0);
+  assert.ok(POST_PROCESSING.shaderPass.scrollThreshold < 0.5);
 });
 
 test("package json uses Vite, Three.js, and GSAP", () => {
@@ -181,6 +186,8 @@ test("package json uses Vite, Three.js, and GSAP", () => {
 
 test("index contains the Vite app shell", () => {
   const html = readFileSync("index.html", "utf8");
+  assert.ok(html.includes("<title>Bayar T. Portfolio</title>"));
+  assert.equal(html.includes("<title>Bayar T. | Singularity Portfolio</title>"), false);
   assert.ok(html.includes('<main id="app"'));
   assert.ok(html.includes('id="singularity-stage"'));
   assert.ok(html.includes('id="singularity-canvas"'));
@@ -199,6 +206,8 @@ test("index includes an accessible startup loader before the scene paints", () =
   assert.ok(html.includes('role="status"'));
   assert.ok(html.includes('class="loader-ring"'));
   assert.ok(html.includes('class="loader-stream"'));
+  assert.ok(html.includes('<p class="loader-kicker">Initializing</p>'));
+  assert.equal(html.includes("Initializing singularity"), false);
 });
 
 test("index includes a mobile opt-in phone tilt control", () => {
@@ -507,6 +516,27 @@ test("scene animation loop uses current Three.js timer API", () => {
   assert.equal(source.includes("new THREE.Clock()"), false);
 });
 
+test("scene render loop self-heals viewport changes that miss resize events", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "let lastCanvasClientWidth = 0",
+    "let lastCanvasClientHeight = 0",
+    "let resizeObserver = null",
+    "let resizePoller = 0",
+    "function resizeIfCanvasBoundsChanged()",
+    "new ResizeObserver",
+    "resizeObserver.observe(canvas)",
+    "window.setInterval(resizeIfCanvasBoundsChanged, 250)",
+    "window.clearInterval(resizePoller)",
+    "resizeObserver.disconnect()",
+    "canvas.clientWidth",
+    "canvas.clientHeight",
+    "resizeIfCanvasBoundsChanged();"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing resize self-heal fragment ${fragment}`);
+  }
+});
+
 test("scene module imports post-processing passes and uses custom shader materials", () => {
   const source = readFileSync("src/scene.js", "utf8");
   for (const fragment of [
@@ -542,6 +572,65 @@ test("post-processing transition uses shader displacement instead of CSS overlay
   }
   assert.equal(source.includes("pulseSceneTransition({ origin: horizonWorldCenter })"), false);
   assert.equal(css.includes(".scene-transition-overlay"), false);
+});
+
+test("scroll transition uses a dedicated shader uniform and scene API", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "uScrollTransition",
+    "uScrollDirection",
+    "uScrollDisplacement",
+    "uScrollThreshold",
+    "scrollTransitionNoise",
+    "scrollTransitionMask",
+    "scrollWarmStreak",
+    "function setScrollTransition",
+    "gsap.to(cinematicPass.uniforms.uScrollTransition",
+    "const scrollOrbitEase",
+    "const scrollParallax",
+    "root.classList?.toggle(\"is-scroll-transitioning\"",
+    "setScrollTransition,"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing scroll transition scene fragment ${fragment}`);
+  }
+  assert.equal(source.includes("uSceneTransition: { value: 1 }"), false);
+});
+
+test("main app maps wheel and touch gestures to reversible scene scroll transition", () => {
+  const source = readFileSync("src/main.js", "utf8");
+  for (const fragment of [
+    "let scrollTransitioned = false",
+    "let scrollGestureAccumulator = 0",
+    "function setScrollTransitionState(nextTransitioned",
+    "app.classList.toggle(\"is-scroll-transitioned\", scrollTransitioned)",
+    "sceneController?.setScrollTransition(targetProgress",
+    "function handleScrollTransitionWheel(event)",
+    "event.deltaY",
+    "event.preventDefault()",
+    "function handleScrollTransitionTouchStart(event)",
+    "function handleScrollTransitionTouchMove(event)",
+    "window.addEventListener(\"wheel\", handleScrollTransitionWheel, { passive: false })",
+    "window.addEventListener(\"touchstart\", handleScrollTransitionTouchStart, { passive: true })",
+    "window.addEventListener(\"touchmove\", handleScrollTransitionTouchMove, { passive: false })",
+    "TRANSITIONS.scrollGestureThreshold",
+    "motionQuery.matches"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing scroll transition main.js fragment ${fragment}`);
+  }
+});
+
+test("CSS has scroll-transition states without adding a full page overlay", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  for (const fragment of [
+    "overscroll-behavior: none;",
+    ".app-shell.is-scroll-transitioned .orbit-node-button",
+    ".app-shell.is-scroll-transitioned .hero-copy",
+    ".app-shell.is-scroll-transitioning #singularity-canvas",
+    "@media (prefers-reduced-motion: reduce)"
+  ]) {
+    assert.ok(css.includes(fragment), `Missing scroll transition CSS fragment ${fragment}`);
+  }
+  assert.equal(css.includes(".scroll-transition-overlay"), false);
 });
 
 test("event horizon visibility comes from the shader, not a top-level black overlay", () => {

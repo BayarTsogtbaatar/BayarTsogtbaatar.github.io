@@ -57,6 +57,8 @@ export const POST_PROCESSING = {
     diveAberration: 0.007,
     contactAberration: 0.0034,
     transitionDisplacement: 0.012,
+    scrollDisplacement: 0.022,
+    scrollThreshold: 0.18,
     lensDistortion: 0.048,
     vignette: 0.72,
     grain: 0.01
@@ -100,5 +102,7 @@ export const TRANSITIONS = {
   introMs: 2200,
   diveMs: 1400,
   returnMs: 900,
+  scrollMs: 1050,
+  scrollGestureThreshold: 72,
   effects: ["chromatic-aberration", "tech-displacement", "gravitational-warp", "frost-dissolve"]
 };

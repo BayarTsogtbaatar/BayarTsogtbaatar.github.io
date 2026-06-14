@@ -32,6 +32,10 @@ let sceneModulePromise = null;
 let tiltController = null;
 let tiltUnavailable = false;
 let transitionTimer = 0;
+let scrollTransitionTimer = 0;
+let scrollTransitioned = false;
+let scrollGestureAccumulator = 0;
+let scrollTouchStartY = null;
 let loaderFinishing = false;
 
 function canUseWebGL() {
@@ -58,6 +62,13 @@ function clearTransitionTimer() {
   if (transitionTimer) {
     window.clearTimeout(transitionTimer);
     transitionTimer = 0;
+  }
+}
+
+function clearScrollTransitionTimer() {
+  if (scrollTransitionTimer) {
+    window.clearTimeout(scrollTransitionTimer);
+    scrollTransitionTimer = 0;
   }
 }
 
@@ -214,6 +225,79 @@ function updateHash(sectionId) {
   }
 }
 
+function canUseScrollTransition(event) {
+  const target = event?.target instanceof Element ? event.target : null;
+  if (target?.closest(".content-panel")) return false;
+  if (app.classList.contains("webgl-fallback")) return false;
+
+  return state.mode === "intro" || state.mode === "orbit";
+}
+
+function setScrollTransitionState(nextTransitioned, { immediate = motionQuery.matches } = {}) {
+  if (scrollTransitioned === nextTransitioned && !immediate) return;
+
+  const targetProgress = nextTransitioned ? 1 : 0;
+  scrollTransitioned = nextTransitioned;
+  scrollGestureAccumulator = 0;
+  app.classList.toggle("is-scroll-transitioned", scrollTransitioned);
+  app.classList.add("is-scroll-transitioning");
+  sceneController?.setScrollTransition(targetProgress, {
+    immediate,
+    direction: scrollTransitioned ? 1 : -1
+  });
+
+  clearScrollTransitionTimer();
+  if (immediate || motionQuery.matches) {
+    app.classList.remove("is-scroll-transitioning");
+    return;
+  }
+
+  scrollTransitionTimer = window.setTimeout(() => {
+    app.classList.remove("is-scroll-transitioning");
+    scrollTransitionTimer = 0;
+  }, TRANSITIONS.scrollMs);
+}
+
+function updateScrollGestureFromDelta(deltaY) {
+  if (!Number.isFinite(deltaY) || Math.abs(deltaY) < 1) return;
+
+  scrollGestureAccumulator += deltaY;
+
+  if (!scrollTransitioned && scrollGestureAccumulator >= TRANSITIONS.scrollGestureThreshold) {
+    setScrollTransitionState(true);
+  } else if (scrollTransitioned && scrollGestureAccumulator <= -TRANSITIONS.scrollGestureThreshold) {
+    setScrollTransitionState(false);
+  }
+}
+
+function handleScrollTransitionWheel(event) {
+  if (!canUseScrollTransition(event)) return;
+
+  event.preventDefault();
+  updateScrollGestureFromDelta(event.deltaY);
+}
+
+function handleScrollTransitionTouchStart(event) {
+  if (!canUseScrollTransition(event)) return;
+
+  scrollTouchStartY = event.touches?.[0]?.clientY ?? null;
+  scrollGestureAccumulator = 0;
+}
+
+function handleScrollTransitionTouchMove(event) {
+  if (!canUseScrollTransition(event) || scrollTouchStartY === null) return;
+
+  const touchY = event.touches?.[0]?.clientY;
+  if (!Number.isFinite(touchY)) return;
+
+  const deltaY = scrollTouchStartY - touchY;
+  if (Math.abs(deltaY) < 2) return;
+
+  event.preventDefault();
+  scrollGestureAccumulator = 0;
+  updateScrollGestureFromDelta(deltaY);
+}
+
 function completeFocusTransition() {
   state = completeDive(state);
   sceneController?.focusSection(state.activeSectionId);
@@ -317,6 +401,16 @@ function bindControls() {
   });
 }
 
+function bindScrollTransition() {
+  window.addEventListener("wheel", handleScrollTransitionWheel, { passive: false });
+  window.addEventListener("touchstart", handleScrollTransitionTouchStart, { passive: true });
+  window.addEventListener("touchmove", handleScrollTransitionTouchMove, { passive: false });
+
+  motionQuery.addEventListener?.("change", () => {
+    setScrollTransitionState(scrollTransitioned, { immediate: true });
+  });
+}
+
 function renderApp() {
   profileRoot.innerHTML = renderProfile(PROFILE);
   orbitControls.innerHTML = renderOrbitControls(sections);
@@ -345,6 +439,10 @@ async function startScene() {
     });
     sceneController.start();
     syncSceneToState();
+    sceneController.setScrollTransition(scrollTransitioned ? 1 : 0, {
+      immediate: true,
+      direction: scrollTransitioned ? 1 : -1
+    });
     if (tiltController?.active) {
       sceneController.setDeviceTilt({ active: true });
     }
@@ -377,6 +475,7 @@ function initApp() {
   renderApp();
   bindControls();
   bindTiltControl();
+  bindScrollTransition();
   syncUi();
   startScene();
   openInitialHash();
