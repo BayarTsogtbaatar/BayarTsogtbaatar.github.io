@@ -240,6 +240,8 @@ function setScrollTransitionState(nextTransitioned, { immediate = motionQuery.ma
   scrollTransitioned = nextTransitioned;
   scrollGestureAccumulator = 0;
   app.classList.toggle("is-scroll-transitioned", scrollTransitioned);
+  app.classList.toggle("is-cards-page", scrollTransitioned);
+  document.documentElement.classList.toggle("is-cards-page", scrollTransitioned);
   app.classList.add("is-scroll-transitioning");
   sceneController?.setScrollTransition(targetProgress, {
     immediate,
@@ -249,11 +251,13 @@ function setScrollTransitionState(nextTransitioned, { immediate = motionQuery.ma
   clearScrollTransitionTimer();
   if (immediate || motionQuery.matches) {
     app.classList.remove("is-scroll-transitioning");
+    document.documentElement.classList.remove("is-scroll-transitioning");
     return;
   }
 
   scrollTransitionTimer = window.setTimeout(() => {
     app.classList.remove("is-scroll-transitioning");
+    document.documentElement.classList.remove("is-scroll-transitioning");
     scrollTransitionTimer = 0;
   }, TRANSITIONS.scrollMs);
 }

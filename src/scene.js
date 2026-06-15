@@ -1,12 +1,15 @@
 import * as THREE from "three";
+import * as CANNON from "cannon-es";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { Sky } from "three/addons/objects/Sky.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { gsap } from "gsap";
 import {
   COLORS,
+  HOUSE_OF_CARDS,
   NODE_LAYOUT,
   PARTICLE_BUDGETS,
   POST_PROCESSING,
@@ -572,6 +575,1249 @@ export function computeDopplerBeaming({ radius, eventHorizonRadius, inclination,
   return doppler ** exponent;
 }
 
+export function buildHouseOfCardsLayout({
+  bottomTriangles = HOUSE_OF_CARDS.bottomTriangles,
+  cardHeight = HOUSE_OF_CARDS.cardHeight,
+  cardThickness = HOUSE_OF_CARDS.cardThickness,
+  cardColliderThickness = HOUSE_OF_CARDS.cardColliderThickness,
+  cardVisualThickness = HOUSE_OF_CARDS.cardVisualThickness,
+  faceInwardAngle = HOUSE_OF_CARDS.faceInwardAngle,
+  leanAngle = HOUSE_OF_CARDS.leanAngle,
+  tableY = HOUSE_OF_CARDS.tableY,
+  triangleSpacing = HOUSE_OF_CARDS.triangleSpacing
+} = {}) {
+  const safeBottomTriangles = Math.max(1, Math.floor(bottomTriangles));
+  const rows = [];
+  const cards = [];
+  const leftRotation = createHouseCardTentRotation(1, leanAngle);
+  const rightRotation = createHouseCardTentRotation(-1, leanAngle);
+  const localTopCenter = new THREE.Vector3(0, cardHeight * 0.5, 0);
+  const localBottomCenter = new THREE.Vector3(0, -cardHeight * 0.5, 0);
+  const leftTopOffset = localTopCenter.clone().applyEuler(leftRotation);
+  const rightTopOffset = localTopCenter.clone().applyEuler(rightRotation);
+  const leftBottomOffset = localBottomCenter.clone().applyEuler(leftRotation);
+  const rightBottomOffset = localBottomCenter.clone().applyEuler(rightRotation);
+  const uprightHeight = Math.max(
+    leftTopOffset.y - leftBottomOffset.y,
+    rightTopOffset.y - rightBottomOffset.y
+  );
+  const contactThickness = Math.max(cardThickness, cardVisualThickness, cardColliderThickness);
+  const rowRise = uprightHeight + contactThickness * 1.05;
+
+  for (let rowIndex = 0; rowIndex < safeBottomTriangles; rowIndex += 1) {
+    const triangleCount = safeBottomTriangles - rowIndex;
+    const baseY = tableY + rowIndex * rowRise;
+    const apexY = baseY + uprightHeight;
+    const rowStartX = -((triangleCount - 1) * triangleSpacing) * 0.5;
+    rows.push({ rowIndex, triangleCount, baseY, apexY });
+
+    for (let columnIndex = 0; columnIndex < triangleCount; columnIndex += 1) {
+      const centerX = rowStartX + columnIndex * triangleSpacing;
+      const apex = new THREE.Vector3(centerX, apexY, 0);
+      const common = { rowIndex, columnIndex };
+      cards.push({
+        ...common,
+        id: `r${rowIndex}-c${columnIndex}-left`,
+        kind: "leaning",
+        side: "left",
+        position: apex.clone().sub(leftTopOffset),
+        rotation: cloneEuler(leftRotation)
+      });
+      cards.push({
+        ...common,
+        id: `r${rowIndex}-c${columnIndex}-right`,
+        kind: "leaning",
+        side: "right",
+        position: apex.clone().sub(rightTopOffset),
+        rotation: cloneEuler(rightRotation)
+      });
+    }
+
+    for (let bridgeIndex = 0; bridgeIndex < triangleCount - 1; bridgeIndex += 1) {
+      cards.push({
+        id: `r${rowIndex}-b${bridgeIndex}`,
+        kind: "bridge",
+        rowIndex,
+        columnIndex: bridgeIndex,
+        position: new THREE.Vector3(rowStartX + (bridgeIndex + 0.5) * triangleSpacing, apexY + contactThickness * 0.52, 0),
+        rotation: new THREE.Euler(Math.PI * 0.5, 0, Math.PI * 0.5)
+      });
+    }
+  }
+
+  const bounds = computeHouseCardLayoutBounds(cards, {
+    cardWidth: HOUSE_OF_CARDS.cardWidth,
+    cardHeight,
+    cardVisualThickness
+  });
+
+  return {
+    rows,
+    cards,
+    rowRise,
+    width: bounds.width,
+    height: bounds.maxY - tableY + contactThickness,
+    depth: bounds.depth
+  };
+}
+
+function cloneEuler(euler) {
+  return new THREE.Euler(euler.x, euler.y, euler.z, euler.order);
+}
+
+function createHouseCardTentRotation(depthSign, leanAngle) {
+  const tentYaw = Math.PI * 0.5;
+  const yawAxis = new THREE.Vector3(0, 1, 0);
+  const widthAxis = new THREE.Vector3(-depthSign, 0, 0).applyAxisAngle(yawAxis, tentYaw);
+  const heightAxis = new THREE.Vector3(
+    0,
+    Math.cos(leanAngle),
+    -depthSign * Math.sin(leanAngle)
+  ).applyAxisAngle(yawAxis, tentYaw);
+  const normalAxis = new THREE.Vector3().crossVectors(widthAxis, heightAxis).normalize();
+  const rotationMatrix = new THREE.Matrix4().makeBasis(widthAxis, heightAxis, normalAxis);
+  return new THREE.Euler().setFromQuaternion(
+    new THREE.Quaternion().setFromRotationMatrix(rotationMatrix)
+  );
+}
+
+function computeHouseCardLayoutBounds(cards, {
+  cardWidth,
+  cardHeight,
+  cardVisualThickness
+}) {
+  const halfWidth = cardWidth * 0.5;
+  const halfHeight = cardHeight * 0.5;
+  const halfThickness = cardVisualThickness * 0.5;
+  const corner = new THREE.Vector3();
+  const rotatedCorner = new THREE.Vector3();
+  const bounds = {
+    minX: Infinity,
+    maxX: -Infinity,
+    minY: Infinity,
+    maxY: -Infinity,
+    minZ: Infinity,
+    maxZ: -Infinity
+  };
+
+  for (const card of cards) {
+    for (const x of [-halfWidth, halfWidth]) {
+      for (const y of [-halfHeight, halfHeight]) {
+        for (const z of [-halfThickness, halfThickness]) {
+          corner.set(x, y, z);
+          rotatedCorner.copy(corner).applyEuler(card.rotation).add(card.position);
+          bounds.minX = Math.min(bounds.minX, rotatedCorner.x);
+          bounds.maxX = Math.max(bounds.maxX, rotatedCorner.x);
+          bounds.minY = Math.min(bounds.minY, rotatedCorner.y);
+          bounds.maxY = Math.max(bounds.maxY, rotatedCorner.y);
+          bounds.minZ = Math.min(bounds.minZ, rotatedCorner.z);
+          bounds.maxZ = Math.max(bounds.maxZ, rotatedCorner.z);
+        }
+      }
+    }
+  }
+
+  return {
+    ...bounds,
+    width: bounds.maxX - bounds.minX,
+    depth: bounds.maxZ - bounds.minZ
+  };
+}
+
+export function applyPlayingCardBend(geometry, bend = 0.018, twist = 0) {
+  const paperBasePositions = geometry.userData.paperBasePositions;
+  const positionAttribute = geometry.attributes.position;
+  if (!paperBasePositions || !positionAttribute) return geometry;
+
+  const width = geometry.userData.paperWidth ?? HOUSE_OF_CARDS.cardWidth;
+  const height = geometry.userData.paperHeight ?? HOUSE_OF_CARDS.cardHeight;
+  const positions = positionAttribute.array;
+  const halfWidth = width * 0.5;
+  const halfHeight = height * 0.5;
+
+  for (let i = 0; i < positions.length; i += 3) {
+    const baseX = paperBasePositions[i];
+    const baseY = paperBasePositions[i + 1];
+    const baseZ = paperBasePositions[i + 2];
+    const xRatio = clamp(baseX / halfWidth, -1, 1);
+    const yRatio = clamp(baseY / halfHeight, -1, 1);
+    const centerLift = 1 - yRatio * yRatio;
+    const crossCurl = xRatio * xRatio - 0.38;
+    const cornerMemory = Math.abs(xRatio * yRatio);
+
+    positions[i] = baseX + xRatio * Math.abs(bend) * 0.012 * centerLift;
+    positions[i + 1] = baseY + yRatio * Math.abs(twist) * 0.01 * (1 - Math.abs(xRatio));
+    positions[i + 2] = baseZ
+      + centerLift * bend
+      + crossCurl * bend * 0.26
+      + xRatio * yRatio * twist
+      + cornerMemory * bend * 0.08;
+  }
+
+  geometry.computeVertexNormals();
+  positionAttribute.needsUpdate = true;
+  geometry.attributes.normal.needsUpdate = true;
+  return geometry;
+}
+
+export function createFlexiblePlayingCardGeometry({
+  width = HOUSE_OF_CARDS.cardWidth,
+  height = HOUSE_OF_CARDS.cardHeight,
+  thickness = HOUSE_OF_CARDS.cardVisualThickness,
+  bend = 0.018,
+  twist = 0,
+  clothInspiredSegments = { width: 8, height: 24, thickness: 2 }
+} = {}) {
+  const geometry = new THREE.BoxGeometry(
+    width,
+    height,
+    thickness,
+    clothInspiredSegments.width,
+    clothInspiredSegments.height,
+    clothInspiredSegments.thickness
+  );
+  const positionAttribute = geometry.attributes.position;
+  positionAttribute.setUsage(THREE.DynamicDrawUsage);
+  geometry.attributes.normal.setUsage(THREE.DynamicDrawUsage);
+  geometry.userData.paperWidth = width;
+  geometry.userData.paperHeight = height;
+  geometry.userData.paperThickness = thickness;
+  geometry.userData.clothInspiredSegments = clothInspiredSegments;
+  geometry.userData.paperBasePositions = new Float32Array(positionAttribute.array);
+  applyPlayingCardBend(geometry, bend, twist);
+  geometry.computeBoundingBox();
+  return geometry;
+}
+
+let ammoPhysicsRuntimePromise = null;
+
+function ammoWasmUrl() {
+  if (typeof window === "undefined") return "ammo.wasm.wasm";
+  return new URL("ammo.wasm.wasm", window.location.href).href;
+}
+
+function ammoScriptUrl() {
+  if (typeof window === "undefined") return "ammo.wasm.js";
+  return new URL("ammo.wasm.js", window.location.href).href;
+}
+
+function loadAmmoScript() {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Ammo soft-card physics requires a browser runtime"));
+  }
+  if (typeof window.Ammo === "function") {
+    return Promise.resolve(window.Ammo);
+  }
+
+  return new Promise((resolve, reject) => {
+    const existingScript = document.querySelector('script[data-ammo-soft-card-runtime="true"]');
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(window.Ammo), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Failed to load ammo.wasm.js")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = ammoScriptUrl();
+    script.async = true;
+    script.dataset.ammoSoftCardRuntime = "true";
+    script.onload = () => resolve(window.Ammo);
+    script.onerror = () => reject(new Error("Failed to load ammo.wasm.js"));
+    document.head.appendChild(script);
+  });
+}
+
+export async function loadAmmoPhysicsRuntime() {
+  if (ammoPhysicsRuntimePromise) return ammoPhysicsRuntimePromise;
+
+  ammoPhysicsRuntimePromise = loadAmmoScript().then((AmmoFactory) => AmmoFactory({
+    locateFile(path) {
+      return path === "ammo.wasm.wasm" ? ammoWasmUrl() : path;
+    }
+  })).then((Ammo) => {
+    const gravityConstant = HOUSE_OF_CARDS.gravity;
+    const margin = 0.05;
+    const collisionConfiguration = new Ammo.btSoftBodyRigidBodyCollisionConfiguration();
+    const dispatcher = new Ammo.btCollisionDispatcher(collisionConfiguration);
+    const broadphase = new Ammo.btDbvtBroadphase();
+    const solver = new Ammo.btSequentialImpulseConstraintSolver();
+    const softBodySolver = new Ammo.btDefaultSoftBodySolver();
+    const physicsWorld = new Ammo.btSoftRigidDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration, softBodySolver);
+    physicsWorld.setGravity(new Ammo.btVector3(0, gravityConstant, 0));
+    physicsWorld.getWorldInfo().set_m_gravity(new Ammo.btVector3(0, gravityConstant, 0));
+
+    return {
+      Ammo,
+      physicsWorld,
+      softBodyHelpers: new Ammo.btSoftBodyHelpers(),
+      transformAux1: new Ammo.btTransform(),
+      margin,
+      softBodies: new Set()
+    };
+  });
+
+  return ammoPhysicsRuntimePromise;
+}
+
+function createAmmoSoftCardGeometry() {
+  const geometry = new THREE.PlaneGeometry(
+    HOUSE_OF_CARDS.cardWidth,
+    HOUSE_OF_CARDS.cardHeight,
+    8,
+    24
+  );
+  geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  geometry.attributes.normal.setUsage(THREE.DynamicDrawUsage);
+  return geometry;
+}
+
+function createAmmoSoftCardPatch(body, runtime) {
+  if (body.ammoSoftBody || !body.mesh) return body.ammoSoftBody;
+
+  const { Ammo, physicsWorld, softBodyHelpers, margin, softBodies } = runtime;
+  const clothWidth = HOUSE_OF_CARDS.cardWidth;
+  const clothHeight = HOUSE_OF_CARDS.cardHeight;
+  const clothNumSegmentsZ = 8;
+  const clothNumSegmentsY = 24;
+  const halfWidth = clothWidth * 0.5;
+  const halfHeight = clothHeight * 0.5;
+  const clothCorner00 = new Ammo.btVector3(-halfWidth, halfHeight, 0);
+  const clothCorner01 = new Ammo.btVector3(halfWidth, halfHeight, 0);
+  const clothCorner10 = new Ammo.btVector3(-halfWidth, -halfHeight, 0);
+  const clothCorner11 = new Ammo.btVector3(halfWidth, -halfHeight, 0);
+  const ammoSoftBody = softBodyHelpers.CreatePatch(
+    physicsWorld.getWorldInfo(),
+    clothCorner00,
+    clothCorner01,
+    clothCorner10,
+    clothCorner11,
+    clothNumSegmentsZ + 1,
+    clothNumSegmentsY + 1,
+    0,
+    true
+  );
+  const sbConfig = ammoSoftBody.get_m_cfg();
+  sbConfig.set_viterations(10);
+  sbConfig.set_piterations(10);
+
+  ammoSoftBody.setTotalMass(body.kind === "bridge" ? 0.28 : 0.34, false);
+  Ammo.castObject(ammoSoftBody, Ammo.btCollisionObject).getCollisionShape().setMargin(margin * 3);
+  physicsWorld.addSoftBody(ammoSoftBody, 1, -1);
+  ammoSoftBody.setActivationState(4);
+
+  const previousGeometry = body.mesh.geometry;
+  body.mesh.geometry = createAmmoSoftCardGeometry();
+  previousGeometry?.dispose?.();
+  body.ammoSoftBody = ammoSoftBody;
+  body.ammoRuntime = runtime;
+  softBodies.add(body);
+  return ammoSoftBody;
+}
+
+function requestAmmoSoftCardPatch(body) {
+  if (typeof window === "undefined" || body.ammoSoftBody || body.ammoRuntimePending) return;
+
+  body.ammoRuntimePending = true;
+  loadAmmoPhysicsRuntime()
+    .then((runtime) => {
+      body.ammoRuntimePending = false;
+      if (!body.removing || !body.mesh) return;
+      createAmmoSoftCardPatch(body, runtime);
+    })
+    .catch((error) => {
+      body.ammoRuntimePending = false;
+      console.warn("Ammo soft-card physics failed to initialize", error);
+    });
+}
+
+function updateAmmoSoftCardGeometry(body) {
+  const ammoSoftBody = body.ammoSoftBody;
+  const geometry = body.mesh?.geometry;
+  if (!ammoSoftBody || !geometry?.attributes?.position) return;
+
+  const clothPositions = geometry.attributes.position.array;
+  const numVerts = clothPositions.length / 3;
+  const nodes = ammoSoftBody.get_m_nodes();
+  let indexFloat = 0;
+
+  for (let i = 0; i < numVerts; i += 1) {
+    const node = nodes.at(i);
+    const nodePos = node.get_m_x();
+    clothPositions[indexFloat++] = nodePos.x();
+    clothPositions[indexFloat++] = nodePos.y();
+    clothPositions[indexFloat++] = nodePos.z();
+  }
+
+  geometry.computeVertexNormals();
+  geometry.attributes.position.needsUpdate = true;
+  geometry.attributes.normal.needsUpdate = true;
+}
+
+function stepAmmoSoftCardPhysics(body, delta) {
+  if (!body.ammoRuntime || !body.ammoSoftBody) return false;
+
+  body.ammoRuntime.physicsWorld.stepSimulation(delta, 10);
+  updateAmmoSoftCardGeometry(body);
+  return true;
+}
+
+function disposeAmmoSoftCardPatch(body) {
+  if (!body.ammoRuntime || !body.ammoSoftBody) return;
+
+  body.ammoRuntime.physicsWorld.removeSoftBody(body.ammoSoftBody);
+  body.ammoRuntime.softBodies.delete(body);
+  body.ammoSoftBody = null;
+  body.ammoRuntime = null;
+}
+
+function copyThreeVectorToCannon(source, target) {
+  target.set(source.x, source.y, source.z);
+}
+
+function copyCannonVectorToThree(source, target) {
+  target.set(source.x, source.y, source.z);
+}
+
+function setCannonQuaternionFromEuler(target, euler) {
+  const quaternion = new THREE.Quaternion().setFromEuler(euler);
+  target.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+}
+
+function copyCannonQuaternionToThree(source, target) {
+  target.set(source.x, source.y, source.z, source.w);
+}
+
+function createHouseCardsPhysicsWorld(cards, {
+  gravity = HOUSE_OF_CARDS.gravity,
+  tableY = HOUSE_OF_CARDS.tableY
+} = {}) {
+  const physicsWorld = new CANNON.World({
+    gravity: new CANNON.Vec3(0, gravity, 0)
+  });
+  physicsWorld.allowSleep = true;
+  physicsWorld.broadphase = new CANNON.SAPBroadphase(physicsWorld);
+  physicsWorld.solver.iterations = 18;
+  physicsWorld.solver.tolerance = 0.0008;
+
+  const cardPhysicsMaterial = new CANNON.Material("house-card");
+  const tablePhysicsMaterial = new CANNON.Material("picnic-table");
+  physicsWorld.defaultContactMaterial.friction = 0.42;
+  physicsWorld.defaultContactMaterial.restitution = 0.04;
+  physicsWorld.addContactMaterial(new CANNON.ContactMaterial(cardPhysicsMaterial, tablePhysicsMaterial, {
+    friction: 0.86,
+    restitution: 0.035,
+    contactEquationStiffness: 1e7,
+    contactEquationRelaxation: 4
+  }));
+  physicsWorld.addContactMaterial(new CANNON.ContactMaterial(cardPhysicsMaterial, cardPhysicsMaterial, {
+    friction: 0.58,
+    restitution: 0.025,
+    contactEquationStiffness: 1e7,
+    contactEquationRelaxation: 5
+  }));
+
+  const minX = Math.min(...cards.map((card) => card.position.x)) - HOUSE_OF_CARDS.cardHeight * 0.65;
+  const maxX = Math.max(...cards.map((card) => card.position.x)) + HOUSE_OF_CARDS.cardHeight * 0.65;
+  const tableBody = new CANNON.Body({
+    mass: 0,
+    material: tablePhysicsMaterial,
+    shape: new CANNON.Box(new CANNON.Vec3(
+      Math.max(2, (maxX - minX) * 0.5 + 0.55),
+      HOUSE_OF_CARDS.picnicTableTopThickness * 0.5,
+      HOUSE_OF_CARDS.picnicTableDepth * 0.5
+    ))
+  });
+  tableBody.position.set(0, tableY - HOUSE_OF_CARDS.picnicTableTopThickness * 0.5, 0);
+  physicsWorld.addBody(tableBody);
+
+  return {
+    physicsWorld,
+    cardPhysicsMaterial,
+    tableBody
+  };
+}
+
+export function createHouseCardPhysicsBodies(cards, {
+  gravity = HOUSE_OF_CARDS.gravity,
+  tableY = HOUSE_OF_CARDS.tableY,
+  cardThickness = HOUSE_OF_CARDS.cardThickness,
+  cardColliderThickness = HOUSE_OF_CARDS.cardColliderThickness
+} = {}) {
+  const { physicsWorld, cardPhysicsMaterial, tableBody } = createHouseCardsPhysicsWorld(cards, {
+    gravity,
+    tableY
+  });
+  const halfExtents = new CANNON.Vec3(
+    HOUSE_OF_CARDS.cardWidth * 0.5,
+    HOUSE_OF_CARDS.cardHeight * 0.5,
+    cardColliderThickness * 0.5
+  );
+  const cardShape = new CANNON.Box(halfExtents);
+  const bodies = cards.map((card, index) => {
+    const mass = card.kind === "bridge" ? 0.44 : 0.56;
+    const cannonBody = new CANNON.Body({
+      mass: 0,
+      type: CANNON.Body.STATIC,
+      material: cardPhysicsMaterial,
+      linearDamping: 0.035,
+      angularDamping: 0.055,
+      allowSleep: true
+    });
+    cannonBody.addShape(cardShape);
+    copyThreeVectorToCannon(card.position, cannonBody.position);
+    setCannonQuaternionFromEuler(cannonBody.quaternion, card.rotation);
+    cannonBody.sleepSpeedLimit = 0.06;
+    cannonBody.sleepTimeLimit = 0.18;
+    physicsWorld.addBody(cannonBody);
+    cannonBody.sleep();
+
+    return {
+      id: card.id,
+      kind: card.kind,
+      side: card.side,
+      rowIndex: card.rowIndex,
+      columnIndex: card.columnIndex,
+      mesh: null,
+      mass,
+      awake: false,
+      propagated: false,
+      manualCollapse: false,
+      dragging: false,
+      removing: false,
+      removed: false,
+      ammoRuntimePending: false,
+      ammoRuntime: null,
+      ammoSoftBody: null,
+      removalAge: 0,
+      removalDuration: 0.95,
+      collapseAge: 0,
+      collapseDelay: 0,
+      initialPaperBend: card.kind === "bridge" ? 0.01 : 0.017 + (index % 5) * 0.0014,
+      paperBend: card.kind === "bridge" ? 0.01 : 0.017 + (index % 5) * 0.0014,
+      paperTwist: 0,
+      gravity,
+      groundY: tableY + Math.max(cardThickness, cardColliderThickness) * 0.5,
+      initialPosition: card.position.clone(),
+      initialRotation: cloneEuler(card.rotation),
+      initialQuaternion: new THREE.Quaternion().setFromEuler(card.rotation),
+      position: card.position.clone(),
+      rotation: cloneEuler(card.rotation),
+      quaternion: new THREE.Quaternion().setFromEuler(card.rotation),
+      velocity: new THREE.Vector3(0, 0, 0),
+      angularVelocity: new THREE.Vector3(0, 0, 0),
+      cannonBody,
+      seed: index * 0.61803398875
+    };
+  });
+  bodies.physicsWorld = physicsWorld;
+  bodies.tableBody = tableBody;
+  bodies.cardPhysicsMaterial = cardPhysicsMaterial;
+  return bodies;
+}
+
+function syncHouseCardBody(body) {
+  if (body.cannonBody) {
+    copyCannonVectorToThree(body.cannonBody.position, body.position);
+    copyCannonQuaternionToThree(body.cannonBody.quaternion, body.quaternion);
+    copyCannonVectorToThree(body.cannonBody.velocity, body.velocity);
+    copyCannonVectorToThree(body.cannonBody.angularVelocity, body.angularVelocity);
+    body.rotation.setFromQuaternion(body.quaternion);
+    body.awake = body.cannonBody.sleepState !== CANNON.Body.SLEEPING;
+    if (body.mesh) {
+      body.mesh.position.copy(body.position);
+      body.mesh.quaternion.copy(body.quaternion);
+    }
+    return;
+  }
+
+  body.mesh?.position.copy(body.position);
+  body.mesh?.rotation.copy(body.rotation);
+}
+
+function resetHouseCardBody(body) {
+  body.awake = false;
+  body.propagated = false;
+  body.manualCollapse = false;
+  body.dragging = false;
+  body.removing = false;
+  body.removed = false;
+  body.ammoRuntimePending = false;
+  body.removalAge = 0;
+  body.collapseAge = 0;
+  body.collapseDelay = 0;
+  body.position.copy(body.initialPosition);
+  body.rotation.copy(body.initialRotation);
+  body.velocity.set(0, 0, 0);
+  body.angularVelocity.set(0, 0, 0);
+  if (body.quaternion) {
+    body.quaternion.copy(body.initialQuaternion);
+  }
+  if (body.cannonBody) {
+    copyThreeVectorToCannon(body.initialPosition, body.cannonBody.position);
+    setCannonQuaternionFromEuler(body.cannonBody.quaternion, body.initialRotation);
+    freezeCannonHouseCardBody(body);
+  }
+  if (body.mesh) {
+    body.mesh.visible = true;
+    body.mesh.userData.removingHouseCard = false;
+    if (body.ammoSoftBody) {
+      body.mesh.geometry?.dispose?.();
+      body.mesh.geometry = createFlexiblePlayingCardGeometry({
+        width: HOUSE_OF_CARDS.cardWidth,
+        height: HOUSE_OF_CARDS.cardHeight,
+        thickness: HOUSE_OF_CARDS.cardVisualThickness,
+        bend: body.initialPaperBend,
+        twist: 0
+      });
+    }
+    setHouseCardBodyOpacity(body, 1);
+    updateHouseCardPaperBend(body, 0);
+  }
+  disposeAmmoSoftCardPatch(body);
+  syncHouseCardBody(body);
+}
+
+function setHouseCardBodyOpacity(body, multiplier) {
+  body.mesh?.traverse((object) => {
+    const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
+    materials.forEach((material) => {
+      if (typeof material.userData.baseOpacity === "number") {
+        material.opacity = material.userData.baseOpacity * multiplier;
+        material.needsUpdate = true;
+      }
+    });
+  });
+}
+
+function freezeCannonHouseCardBody(body) {
+  if (!body.cannonBody) return;
+
+  body.cannonBody.type = CANNON.Body.STATIC;
+  body.cannonBody.mass = 0;
+  body.cannonBody.updateMassProperties();
+  body.cannonBody.collisionResponse = true;
+  body.cannonBody.velocity.set(0, 0, 0);
+  body.cannonBody.angularVelocity.set(0, 0, 0);
+  body.cannonBody.force.set(0, 0, 0);
+  body.cannonBody.torque.set(0, 0, 0);
+  body.cannonBody.sleep();
+  body.awake = false;
+}
+
+function activateCannonHouseCardBody(body) {
+  if (!body.cannonBody || body.removed) return;
+
+  body.cannonBody.type = CANNON.Body.DYNAMIC;
+  body.cannonBody.mass = body.mass;
+  body.cannonBody.updateMassProperties();
+  body.cannonBody.collisionResponse = true;
+  body.cannonBody.wakeUp();
+  body.awake = true;
+}
+
+function applyCannonImpulse(body, impulse, contactOffset) {
+  activateCannonHouseCardBody(body);
+  const contactPoint = new CANNON.Vec3(
+    body.cannonBody.position.x + contactOffset.x,
+    body.cannonBody.position.y + contactOffset.y,
+    body.cannonBody.position.z + contactOffset.z
+  );
+  body.cannonBody.wakeUp();
+  body.cannonBody.applyImpulse(impulse, contactPoint);
+  body.awake = true;
+}
+
+function activateHouseOfCardsPhysicsBodies(bodies, sourceBody = null) {
+  bodies.forEach((body) => {
+    if (!body.cannonBody || body.removed) return;
+    if (sourceBody && body !== sourceBody && !shouldReleaseHouseCardAfterRemoval(body, sourceBody)) return;
+
+    body.manualCollapse = false;
+    body.removing = false;
+    body.dragging = body.dragging ?? false;
+    body.propagated = true;
+    body.mesh && (body.mesh.visible = true);
+    setHouseCardBodyOpacity(body, 1);
+    activateCannonHouseCardBody(body);
+    body.cannonBody.force.set(0, 0, 0);
+    body.cannonBody.torque.set(0, 0, 0);
+  });
+}
+
+export function beginHouseCardDrag(
+  bodies,
+  targetBody,
+  localPoint = targetBody?.position,
+  {
+    maxForce = 42
+  } = {}
+) {
+  if (!bodies?.physicsWorld || !targetBody?.cannonBody || targetBody.removed || targetBody.removing) {
+    return null;
+  }
+
+  activateHouseOfCardsPhysicsBodies(bodies, targetBody);
+  const physicsWorld = bodies.physicsWorld;
+  const anchorPoint = localPoint?.clone?.() ?? targetBody.position.clone();
+  const anchorBody = new CANNON.Body({
+    mass: 0,
+    type: CANNON.Body.KINEMATIC,
+    collisionResponse: false
+  });
+  copyThreeVectorToCannon(anchorPoint, anchorBody.position);
+  physicsWorld.addBody(anchorBody);
+
+  const cannonAnchorPoint = new CANNON.Vec3(anchorPoint.x, anchorPoint.y, anchorPoint.z);
+  const pivotA = targetBody.cannonBody.pointToLocalFrame(cannonAnchorPoint, new CANNON.Vec3());
+  const pivotB = new CANNON.Vec3(0, 0, 0);
+  const constraint = new CANNON.PointToPointConstraint(targetBody.cannonBody, pivotA, anchorBody, pivotB, maxForce);
+  physicsWorld.addConstraint(constraint);
+
+  targetBody.dragging = true;
+  targetBody.awake = true;
+  targetBody.removing = false;
+  targetBody.removed = false;
+  targetBody.cannonBody.collisionResponse = true;
+  targetBody.cannonBody.wakeUp();
+
+  const dragState = {
+    bodies,
+    targetBody,
+    anchorBody,
+    constraint,
+    active: true,
+    lastPoint: anchorPoint.clone(),
+    targetPoint: anchorPoint.clone(),
+    velocity: new THREE.Vector3()
+  };
+  bodies.activeDrag = dragState;
+  return dragState;
+}
+
+export function updateHouseCardDrag(dragState, localPoint, deltaTime = 1 / 60) {
+  if (!dragState?.active || !dragState.anchorBody || !localPoint) return false;
+
+  const delta = clamp(deltaTime, 1 / 240, 1 / 20);
+  dragState.targetPoint.copy(localPoint);
+  dragState.velocity.copy(dragState.targetPoint).sub(dragState.lastPoint).multiplyScalar(1 / delta);
+  dragState.anchorBody.position.set(
+    dragState.targetPoint.x,
+    dragState.targetPoint.y,
+    dragState.targetPoint.z
+  );
+  dragState.anchorBody.velocity.set(
+    dragState.velocity.x,
+    dragState.velocity.y,
+    dragState.velocity.z
+  );
+  dragState.anchorBody.wakeUp();
+  dragState.targetBody?.cannonBody?.wakeUp();
+  dragState.targetBody && (dragState.targetBody.awake = true);
+  dragState.lastPoint.copy(dragState.targetPoint);
+  return true;
+}
+
+export function endHouseCardDrag(dragState) {
+  if (!dragState?.active) return false;
+
+  const { bodies, targetBody, anchorBody, constraint } = dragState;
+  const physicsWorld = bodies?.physicsWorld;
+  if (physicsWorld && constraint) {
+    physicsWorld.removeConstraint(constraint);
+  }
+  if (physicsWorld && anchorBody) {
+    physicsWorld.removeBody(anchorBody);
+  }
+  if (targetBody?.cannonBody) {
+    targetBody.cannonBody.velocity.y = Math.min(targetBody.cannonBody.velocity.y, 0.18);
+    targetBody.cannonBody.angularVelocity.x *= 0.82;
+    targetBody.cannonBody.angularVelocity.z *= 0.82;
+    targetBody.cannonBody.wakeUp();
+    targetBody.awake = true;
+    targetBody.dragging = false;
+    copyCannonVectorToThree(targetBody.cannonBody.velocity, targetBody.velocity);
+    copyCannonVectorToThree(targetBody.cannonBody.angularVelocity, targetBody.angularVelocity);
+    targetBody.cannonBody.collisionResponse = true;
+  }
+  if (bodies?.activeDrag === dragState) {
+    bodies.activeDrag = null;
+  }
+  dragState.active = false;
+  return true;
+}
+
+function shouldReleaseHouseCardAfterRemoval(body, sourceBody) {
+  if (body === sourceBody || body.removed || body.removing) return false;
+  if (body.rowIndex < sourceBody.rowIndex) return false;
+
+  const rowDelta = body.rowIndex - sourceBody.rowIndex;
+  const sourceX = sourceBody.initialPosition.x;
+  const horizontalDistance = Math.abs(body.initialPosition.x - sourceX);
+  const supportConeReach = HOUSE_OF_CARDS.triangleSpacing * (0.72 + rowDelta * 0.52);
+  const sameTriangle = rowDelta === 0 && body.columnIndex === sourceBody.columnIndex;
+  const nearbyBridge = rowDelta === 0
+    && body.kind === "bridge"
+    && Math.abs((body.columnIndex ?? 0) - (sourceBody.columnIndex ?? 0)) <= 1;
+
+  return sameTriangle || nearbyBridge || horizontalDistance <= supportConeReach;
+}
+
+function releaseUnsupportedHouseCards(bodies, sourceBody, pullDirection, strength) {
+  const pullSign = Math.sign(pullDirection.x || sourceBody.position.x || 1);
+  const depthSign = Math.sign(pullDirection.z || Math.sin(sourceBody.seed * 7.1) || 1);
+  const sourceX = sourceBody.initialPosition.x;
+
+  bodies.forEach((body) => {
+    if (!shouldReleaseHouseCardAfterRemoval(body, sourceBody)) return;
+
+    const rowDelta = Math.max(0, body.rowIndex - sourceBody.rowIndex);
+    const sideSign = Math.sign(body.initialPosition.x - sourceX || pullSign);
+    const horizontalDistance = Math.abs(body.initialPosition.x - sourceX);
+    const rowWeight = 1 + rowDelta * 0.025;
+    const stagger = clamp(rowDelta * 0.045 + horizontalDistance * 0.018, 0, 0.22);
+    const upperCascadeFalloff = rowDelta <= 2 ? 1 : 1 / (1 + (rowDelta - 2) * 2.8);
+    const collapseScale = strength * (body.kind === "bridge" ? 0.008 : 0.011) * rowWeight * upperCascadeFalloff;
+
+    body.manualCollapse = false;
+    body.awake = true;
+    body.propagated = true;
+    body.collapseAge = 0;
+    body.collapseDelay = stagger;
+    body.velocity.set(
+      pullDirection.x * collapseScale * 0.48 + sideSign * collapseScale * 0.12,
+      0.015 - rowDelta * 0.006,
+      depthSign * collapseScale * 0.22 + Math.sin(body.seed * 6.7) * 0.01
+    );
+    body.angularVelocity.set(
+      depthSign * (0.18 + rowDelta * 0.026 + Math.abs(pullDirection.z) * 0.12),
+      -sideSign * (0.018 + rowDelta * 0.006),
+      -sideSign * (0.14 + rowDelta * 0.025) - pullSign * 0.03
+    );
+
+    if (body.cannonBody) {
+      activateCannonHouseCardBody(body);
+      copyThreeVectorToCannon(body.position, body.cannonBody.position);
+      copyThreeVectorToCannon(body.velocity, body.cannonBody.velocity);
+      copyThreeVectorToCannon(body.angularVelocity, body.cannonBody.angularVelocity);
+      body.cannonBody.force.set(0, 0, 0);
+      body.cannonBody.torque.set(0, 0, 0);
+      body.cannonBody.wakeUp();
+      const impulseScale = strength * (body.kind === "bridge" ? 0.006 : 0.009) * rowWeight * upperCascadeFalloff;
+      const impulse = new CANNON.Vec3(
+        pullDirection.x * impulseScale + sideSign * impulseScale * 0.18,
+        Math.max(0.015, pullDirection.y + 0.01) * impulseScale,
+        depthSign * impulseScale * (0.18 + Math.abs(pullDirection.z) * 0.22)
+      );
+      const contactOffset = new CANNON.Vec3(
+        -sideSign * HOUSE_OF_CARDS.cardWidth * 0.32,
+        HOUSE_OF_CARDS.cardHeight * (body.kind === "bridge" ? 0.08 : 0.28),
+        depthSign * HOUSE_OF_CARDS.cardColliderThickness * 0.85
+      );
+      applyCannonImpulse(body, impulse, contactOffset);
+      syncHouseCardBody(body);
+    }
+  });
+}
+
+export function removeHouseCardFromStack(
+  bodies,
+  targetBody,
+  direction = new THREE.Vector3(1, 0.04, 0.12),
+  {
+    strength = HOUSE_OF_CARDS.knockStrength
+  } = {}
+) {
+  if (!targetBody || targetBody.removing || targetBody.removed) return false;
+
+  const pullDirection = direction.clone();
+  if (pullDirection.lengthSq() < 0.0001) {
+    pullDirection.set(targetBody.position.x >= 0 ? 1 : -1, 0.04, 0.14);
+  }
+  pullDirection.normalize();
+
+  targetBody.removing = true;
+  targetBody.removed = true;
+  targetBody.removalAge = 0;
+  targetBody.awake = true;
+  targetBody.propagated = true;
+  targetBody.mesh?.userData && (targetBody.mesh.userData.removingHouseCard = true);
+  requestAmmoSoftCardPatch(targetBody);
+
+  if (targetBody.cannonBody) {
+    targetBody.cannonBody.collisionResponse = false;
+    targetBody.cannonBody.sleep();
+    const pullScale = strength * (targetBody.kind === "bridge" ? 0.12 : 0.16);
+    targetBody.velocity.set(
+      pullDirection.x * pullScale,
+      0.12 + Math.max(0, pullDirection.y) * pullScale * 0.1,
+      pullDirection.z * pullScale * 0.68
+    );
+    targetBody.angularVelocity.set(
+      Math.sign(pullDirection.z || 1) * strength * 0.46,
+      -Math.sign(pullDirection.x || 1) * strength * 0.16,
+      -Math.sign(pullDirection.x || 1) * strength * 0.28
+    );
+    copyThreeVectorToCannon(targetBody.velocity, targetBody.cannonBody.velocity);
+    copyThreeVectorToCannon(targetBody.angularVelocity, targetBody.cannonBody.angularVelocity);
+  } else {
+    targetBody.velocity.addScaledVector(pullDirection, strength * 0.18 / targetBody.mass);
+    targetBody.angularVelocity.x += Math.sign(pullDirection.z || 1) * strength * 0.34;
+  }
+
+  releaseUnsupportedHouseCards(bodies, targetBody, pullDirection, strength);
+  syncHouseCardBody(targetBody);
+  return true;
+}
+
+function updateHouseCardRemovalState(body, delta) {
+  if (!body.removing) return;
+
+  const removalDelta = clamp(delta, 0, 1 / 30);
+  const removalProgress = clamp(body.removalAge / body.removalDuration, 0, 1);
+  body.velocity.y += body.gravity * 0.34 * removalDelta;
+  body.position.addScaledVector(body.velocity, removalDelta);
+  body.rotation.x += body.angularVelocity.x * removalDelta;
+  body.rotation.y += body.angularVelocity.y * removalDelta;
+  body.rotation.z += body.angularVelocity.z * removalDelta;
+  body.velocity.multiplyScalar(0.992);
+  body.angularVelocity.multiplyScalar(0.988);
+  if (body.quaternion) {
+    body.quaternion.setFromEuler(body.rotation);
+  }
+  if (body.cannonBody) {
+    copyThreeVectorToCannon(body.position, body.cannonBody.position);
+    setCannonQuaternionFromEuler(body.cannonBody.quaternion, body.rotation);
+    copyThreeVectorToCannon(body.velocity, body.cannonBody.velocity);
+    copyThreeVectorToCannon(body.angularVelocity, body.cannonBody.angularVelocity);
+  }
+  if (body.mesh) {
+    body.mesh.position.copy(body.position);
+    body.mesh.quaternion.copy(body.quaternion ?? new THREE.Quaternion().setFromEuler(body.rotation));
+  }
+  if (!stepAmmoSoftCardPhysics(body, removalDelta)) {
+    updateHouseCardPaperBend(body, removalProgress);
+  }
+
+  body.removalAge += delta;
+  const fade = 1 - smoothstep(body.removalDuration * 0.38, body.removalDuration, body.removalAge);
+  setHouseCardBodyOpacity(body, fade);
+  if (body.removalAge >= body.removalDuration) {
+    body.removing = false;
+    body.awake = false;
+    body.mesh && (body.mesh.visible = false);
+    if (body.cannonBody) {
+      body.cannonBody.velocity.set(0, 0, 0);
+      body.cannonBody.angularVelocity.set(0, 0, 0);
+      body.cannonBody.sleep();
+    }
+    disposeAmmoSoftCardPatch(body);
+  }
+}
+
+function updateManualHouseCardCollapse(body, delta) {
+  if (!body.manualCollapse || body.removed || body.removing) return false;
+
+  body.collapseAge += delta;
+  if (body.collapseAge < body.collapseDelay) {
+    return true;
+  }
+
+  const collapseDelta = clamp(delta, 0, 1 / 30);
+  const activeAge = body.collapseAge - body.collapseDelay;
+  const gravityScale = body.kind === "bridge" ? 0.58 : 0.72;
+  const flutter = Math.sin(activeAge * 5.2 + body.seed * 3.7);
+  const depthFlutter = Math.cos(activeAge * 4.6 + body.seed * 4.1);
+
+  body.velocity.y += body.gravity * gravityScale * collapseDelta;
+  body.velocity.x += flutter * 0.018 * collapseDelta;
+  body.velocity.z += depthFlutter * 0.014 * collapseDelta;
+  body.position.addScaledVector(body.velocity, collapseDelta);
+  body.rotation.x += body.angularVelocity.x * collapseDelta;
+  body.rotation.y += body.angularVelocity.y * collapseDelta;
+  body.rotation.z += body.angularVelocity.z * collapseDelta;
+  body.velocity.multiplyScalar(body.kind === "bridge" ? 0.991 : 0.989);
+  body.angularVelocity.multiplyScalar(body.kind === "bridge" ? 0.987 : 0.984);
+
+  if (body.position.y < body.groundY) {
+    const impactSpeed = Math.abs(Math.min(0, body.velocity.y));
+    const sideSign = Math.sign(body.velocity.x || body.position.x - body.initialPosition.x || Math.sin(body.seed) || 1);
+    const depthSign = Math.sign(body.velocity.z || Math.cos(body.seed) || 1);
+    body.position.y = body.groundY;
+    if (body.velocity.y < 0) {
+      body.velocity.y *= -0.08;
+    }
+    body.velocity.x *= 0.74;
+    body.velocity.z *= 0.76;
+    body.angularVelocity.x += depthSign * Math.min(1.9, impactSpeed * 0.18 + Math.abs(body.velocity.z) * 0.16);
+    body.angularVelocity.y += -sideSign * Math.min(0.42, impactSpeed * 0.035);
+    body.angularVelocity.z *= 0.82;
+  }
+
+  if (body.quaternion) {
+    body.quaternion.setFromEuler(body.rotation);
+  }
+  if (body.cannonBody) {
+    copyThreeVectorToCannon(body.position, body.cannonBody.position);
+    setCannonQuaternionFromEuler(body.cannonBody.quaternion, body.rotation);
+    copyThreeVectorToCannon(body.velocity, body.cannonBody.velocity);
+    copyThreeVectorToCannon(body.angularVelocity, body.cannonBody.angularVelocity);
+    body.cannonBody.sleep();
+  }
+  if (body.mesh) {
+    body.mesh.position.copy(body.position);
+    body.mesh.quaternion.copy(body.quaternion ?? new THREE.Quaternion().setFromEuler(body.rotation));
+  }
+
+  updateHouseCardPaperBend(body, clamp(activeAge / 1.6, 0, 1));
+
+  if (
+    activeAge > 3.2
+    && body.position.y <= body.groundY + 0.001
+    && body.velocity.lengthSq() < 0.004
+    && body.angularVelocity.lengthSq() < 0.02
+  ) {
+    body.manualCollapse = false;
+    body.awake = false;
+    body.velocity.set(0, 0, 0);
+    body.angularVelocity.set(0, 0, 0);
+    body.cannonBody?.sleep();
+  }
+
+  return true;
+}
+
+function updateHouseCardPaperBend(body, removalProgress = 0) {
+  if (!body.mesh?.geometry?.userData?.paperBasePositions) return;
+
+  const flexEnvelope = Math.sin(clamp(removalProgress, 0, 1) * Math.PI);
+  body.paperBend = body.initialPaperBend + flexEnvelope * (body.kind === "bridge" ? 0.035 : 0.07);
+  body.paperTwist = flexEnvelope * Math.sign(body.velocity?.x || body.seed || 1) * (body.kind === "bridge" ? 0.018 : 0.042);
+  applyPlayingCardBend(body.mesh.geometry, body.paperBend, body.paperTwist);
+}
+
+function applyCannonHouseOfCardsKnock(bodies, origin, impulseDirection, radius, strength) {
+  let triggered = false;
+  bodies.forEach((body) => {
+    const distance = body.position.distanceTo(origin);
+    if (distance > radius) return;
+
+    const falloff = (1 - distance / radius) ** 1.45;
+    const rowBias = 1 + (HOUSE_OF_CARDS.bottomTriangles - body.rowIndex) * 0.035;
+    const depthSign = Math.sign(impulseDirection.z || Math.sin(body.seed * 5.1) || 1);
+    const impulseScale = strength * falloff * rowBias * (body.kind === "bridge" ? 0.1 : 0.14);
+    const sideSign = body.position.x >= origin.x ? 1 : -1;
+    const impulse = new CANNON.Vec3(
+      impulseDirection.x * impulseScale * 0.9,
+      Math.max(0.05, impulseDirection.y) * impulseScale * 0.28,
+      depthSign * impulseScale * (0.26 + Math.abs(impulseDirection.z) * 0.36)
+    );
+    const contactOffset = new CANNON.Vec3(
+      -sideSign * HOUSE_OF_CARDS.cardWidth * 0.24,
+      HOUSE_OF_CARDS.cardHeight * (body.kind === "bridge" ? 0.12 : 0.28),
+      depthSign * HOUSE_OF_CARDS.cardVisualThickness * 2.1
+    );
+
+    triggered = true;
+    applyCannonImpulse(body, impulse, contactOffset);
+    body.cannonBody.angularVelocity.x += depthSign * strength * falloff * (body.kind === "bridge" ? 0.48 : 0.76);
+    body.cannonBody.angularVelocity.y += -sideSign * depthSign * strength * falloff * 0.1;
+    body.cannonBody.angularVelocity.z += -Math.sign(impulseDirection.x || sideSign) * strength * falloff * 0.22;
+    syncHouseCardBody(body);
+  });
+
+  if (!triggered) return;
+
+  const highestRow = Math.max(1, ...bodies.map((body) => body.rowIndex));
+  bodies.forEach((body) => {
+    if (body.awake) return;
+
+    const rowProgress = body.rowIndex / highestRow;
+    const horizontalDistance = Math.abs(body.position.x - origin.x);
+    const supportFalloff = clamp(1 - horizontalDistance / (radius * 1.35), 0.18, 1);
+    const cascade = supportFalloff * (0.2 + rowProgress * 0.32);
+    const sideSign = body.position.x >= origin.x ? 1 : -1;
+    const depthSign = Math.sign(impulseDirection.z || Math.sin(body.seed * 4.7) || 1);
+    const impulseScale = strength * cascade * (body.kind === "bridge" ? 0.022 : 0.032);
+    const impulse = new CANNON.Vec3(
+      impulseDirection.x * impulseScale + sideSign * impulseScale * 0.2,
+      impulseScale * (0.12 + rowProgress * 0.08),
+      depthSign * impulseScale * 0.42
+    );
+    const contactOffset = new CANNON.Vec3(
+      -sideSign * HOUSE_OF_CARDS.cardWidth * 0.18,
+      HOUSE_OF_CARDS.cardHeight * 0.22,
+      depthSign * HOUSE_OF_CARDS.cardVisualThickness * 1.8
+    );
+
+    applyCannonImpulse(body, impulse, contactOffset);
+    body.cannonBody.angularVelocity.x += depthSign * strength * cascade * (body.kind === "bridge" ? 0.14 : 0.24);
+    body.cannonBody.angularVelocity.y += -sideSign * depthSign * strength * cascade * 0.045;
+    body.cannonBody.angularVelocity.z += -sideSign * strength * cascade * (body.kind === "bridge" ? 0.05 : 0.08);
+    syncHouseCardBody(body);
+  });
+}
+
+export function applyHouseOfCardsKnock(
+  bodies,
+  origin = new THREE.Vector3(),
+  direction = new THREE.Vector3(1, 0.12, 0),
+  {
+    radius = HOUSE_OF_CARDS.knockRadius,
+    strength = HOUSE_OF_CARDS.knockStrength
+  } = {}
+) {
+  const impulseDirection = direction.clone();
+  if (impulseDirection.lengthSq() < 0.0001) {
+    impulseDirection.set(1, 0.16, 0);
+  }
+  impulseDirection.normalize();
+
+  if (bodies.physicsWorld) {
+    applyCannonHouseOfCardsKnock(bodies, origin, impulseDirection, radius, strength);
+    return;
+  }
+
+  let triggered = false;
+  bodies.forEach((body) => {
+    const distance = body.position.distanceTo(origin);
+    if (distance > radius) return;
+
+    const falloff = (1 - distance / radius) ** 1.55;
+    const rowBias = 1 + (HOUSE_OF_CARDS.bottomTriangles - body.rowIndex) * 0.035;
+    const depthSign = Math.sign(impulseDirection.z || Math.sin(body.seed * 5.1) || 1);
+    const depthImpulse = depthSign * (Math.abs(impulseDirection.z) + 0.34);
+    triggered = true;
+    body.awake = true;
+    body.velocity.addScaledVector(impulseDirection, strength * falloff * rowBias / body.mass);
+    body.velocity.z += depthImpulse * strength * falloff * (body.kind === "bridge" ? 0.18 : 0.28) / body.mass;
+    body.velocity.y += strength * falloff * 0.13;
+    body.angularVelocity.z += (impulseDirection.x >= 0 ? -1 : 1) * strength * falloff * (body.kind === "bridge" ? 0.34 : 0.58);
+    body.angularVelocity.x += depthImpulse * strength * falloff * (body.kind === "bridge" ? 0.42 : 0.68);
+    body.angularVelocity.y += (Math.cos(body.seed * 4.2) - impulseDirection.x * depthSign) * strength * falloff * 0.13;
+  });
+
+  if (!triggered) return;
+
+  const highestRow = Math.max(1, ...bodies.map((body) => body.rowIndex));
+  bodies.forEach((body) => {
+    if (body.awake) return;
+
+    const rowProgress = body.rowIndex / highestRow;
+    const horizontalDistance = Math.abs(body.position.x - origin.x);
+    const supportFalloff = clamp(1 - horizontalDistance / (radius * 1.34), 0.18, 1);
+    const cascade = supportFalloff * (0.3 + rowProgress * 0.34);
+    const sideSign = body.position.x >= origin.x ? 1 : -1;
+    const depthSign = Math.sign(impulseDirection.z || Math.sin(body.seed * 4.7) || 1);
+    const depthImpulse = depthSign * (0.24 + Math.abs(impulseDirection.z) * 0.7);
+
+    body.awake = true;
+    body.velocity.addScaledVector(impulseDirection, strength * cascade * 0.16 / body.mass);
+    body.velocity.y += strength * cascade * (0.035 + rowProgress * 0.045);
+    body.velocity.x += sideSign * strength * cascade * 0.045;
+    body.velocity.z += depthImpulse * strength * cascade * 0.2 / body.mass;
+    body.angularVelocity.z += -sideSign * strength * cascade * (body.kind === "bridge" ? 0.12 : 0.2);
+    body.angularVelocity.x += depthImpulse * strength * cascade * (body.kind === "bridge" ? 0.22 : 0.34);
+    body.angularVelocity.y += -sideSign * depthSign * strength * cascade * 0.08;
+  });
+}
+
+function propagateHouseCardImpulse(bodies, sourceBody) {
+  if (bodies.physicsWorld) return;
+
+  const sourceTilt = Math.abs(sourceBody.rotation.z - sourceBody.initialRotation.z);
+  if (sourceBody.propagated || sourceTilt < 0.2) return;
+
+  sourceBody.propagated = true;
+  bodies.forEach((body) => {
+    if (body === sourceBody || body.awake) return;
+    const rowDistance = Math.abs(body.rowIndex - sourceBody.rowIndex);
+    const distance = body.position.distanceTo(sourceBody.position);
+    if (rowDistance > 1 || distance > HOUSE_OF_CARDS.triangleSpacing * 1.38) return;
+
+    const direction = body.position.clone().sub(sourceBody.position);
+    if (direction.lengthSq() < 0.0001) {
+      direction.set(sourceBody.position.x <= body.position.x ? 1 : -1, 0.22, 0);
+    }
+    direction.normalize();
+    body.awake = true;
+    body.velocity.addScaledVector(direction, 0.85 / body.mass);
+    body.velocity.z += (sourceBody.velocity.z * 0.18 + direction.z * 0.42) / body.mass;
+    body.velocity.y += 0.18;
+    body.angularVelocity.z += (sourceBody.angularVelocity.z || -0.6) * 0.52;
+    body.angularVelocity.x += (sourceBody.angularVelocity.x || Math.sign(sourceBody.velocity.z || 1) * 0.7) * 0.46;
+    body.angularVelocity.y += (sourceBody.angularVelocity.y || direction.x * 0.35) * 0.26;
+  });
+}
+
+export function stepHouseOfCardsPhysics(bodies, deltaTime, {
+  gravity = HOUSE_OF_CARDS.gravity,
+  damping = HOUSE_OF_CARDS.damping,
+  angularDamping = HOUSE_OF_CARDS.angularDamping
+} = {}) {
+  const delta = clamp(deltaTime, 0, 1 / 30);
+
+  if (bodies.physicsWorld) {
+    const physicsWorld = bodies.physicsWorld;
+    const hasAwakeBodies = bodies.activeDrag?.active || bodies.some((body) => (
+      !body.removed
+      && !body.manualCollapse
+      && body.cannonBody
+      && body.cannonBody.type === CANNON.Body.DYNAMIC
+      && (body.awake || body.cannonBody.sleepState !== CANNON.Body.SLEEPING)
+    ));
+    if (hasAwakeBodies) {
+      physicsWorld.step(1 / 60, delta, 8);
+    }
+    bodies.forEach((body) => {
+      if (body.removing) {
+        updateHouseCardRemovalState(body, delta);
+      } else if (body.manualCollapse) {
+        updateManualHouseCardCollapse(body, delta);
+      } else if (!body.removed) {
+        syncHouseCardBody(body);
+      }
+    });
+    return;
+  }
+
+  bodies.forEach((body) => {
+    if (body.manualCollapse) {
+      updateManualHouseCardCollapse(body, delta);
+      return;
+    }
+    if (!body.awake) return;
+
+    body.velocity.y += gravity * delta;
+    body.position.addScaledVector(body.velocity, delta);
+    body.rotation.x += body.angularVelocity.x * delta;
+    body.rotation.y += body.angularVelocity.y * delta;
+    body.rotation.z += body.angularVelocity.z * delta;
+
+    body.velocity.multiplyScalar(damping);
+    body.angularVelocity.multiplyScalar(angularDamping);
+
+    if (body.position.y < body.groundY) {
+      const impactSpeed = Math.abs(Math.min(0, body.velocity.y));
+      const depthSign = Math.sign(body.velocity.z || body.position.z - body.initialPosition.z || Math.sin(body.seed) || 1);
+      body.position.y = body.groundY;
+      if (body.velocity.y < 0) {
+        body.velocity.y *= -0.16;
+      }
+      body.velocity.x *= 0.82;
+      body.velocity.z *= 0.82;
+      body.angularVelocity.x += depthSign * Math.min(2.4, impactSpeed * 0.42 + Math.abs(body.velocity.z) * 0.22);
+      body.angularVelocity.x *= 0.9;
+      body.angularVelocity.y += -Math.sign(body.velocity.x || Math.sin(body.seed) || 1) * impactSpeed * 0.08;
+      body.angularVelocity.z *= 0.9;
+    }
+
+    syncHouseCardBody(body);
+    updateHouseCardRemovalState(body, delta);
+  });
+
+  bodies.forEach((body) => propagateHouseCardImpulse(bodies, body));
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -1044,6 +2290,522 @@ function createNodeGroup(layout) {
   return { group, core, halo };
 }
 
+function applyPageFade(material, baseOpacity) {
+  material.transparent = true;
+  material.opacity = baseOpacity;
+  material.userData.baseOpacity = baseOpacity;
+  return material;
+}
+
+function createHouseCardMaterial(rowIndex, kind) {
+  const color = kind === "bridge"
+    ? new THREE.Color("#fff2d2").lerp(new THREE.Color("#e5c990"), rowIndex * 0.035)
+    : new THREE.Color("#fff8e8").lerp(new THREE.Color("#dfd0b7"), rowIndex * 0.04);
+  const material = new THREE.MeshPhysicalMaterial({
+    color,
+    emissive: new THREE.Color("#fff1d1"),
+    emissiveIntensity: kind === "bridge" ? 0.008 : 0.004,
+    roughness: 0.52,
+    metalness: 0.02,
+    clearcoat: 0.28,
+    clearcoatRoughness: 0.62,
+    side: THREE.DoubleSide
+  });
+  return applyPageFade(material, kind === "bridge" ? 0.9 : 0.96);
+}
+
+function createCardFaceDetails(body) {
+  const group = new THREE.Group();
+  group.name = `house-card-face-details-${body.id}`;
+  const accent = body.kind === "bridge"
+    ? new THREE.Color("#bf4f2f")
+    : new THREE.Color(body.columnIndex % 2 === 0 ? "#2f65b9" : "#c84b38");
+  const ruleColor = accent.clone().lerp(new THREE.Color("#1a2330"), 0.18);
+  const borderMaterial = applyPageFade(
+    new THREE.MeshBasicMaterial({
+      color: accent,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    }),
+    0.9
+  );
+  const pipMaterial = applyPageFade(
+    new THREE.MeshBasicMaterial({
+      color: accent.clone().lerp(new THREE.Color("#ffffff"), 0.12),
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    }),
+    0.96
+  );
+  const grainMaterial = applyPageFade(
+    new THREE.MeshBasicMaterial({
+      color: "#d2bc8f",
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    }),
+    0.26
+  );
+  const ruleMaterial = applyPageFade(
+    new THREE.MeshBasicMaterial({
+      color: ruleColor,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    }),
+    0.78
+  );
+  const faceZ = HOUSE_OF_CARDS.cardVisualThickness * 0.5 + 0.045;
+  const borderInsetX = HOUSE_OF_CARDS.cardWidth * 0.39;
+  const borderInsetY = HOUSE_OF_CARDS.cardHeight * 0.4;
+  const topBottomGeometry = new THREE.PlaneGeometry(HOUSE_OF_CARDS.cardWidth * 0.74, 0.012);
+  const sideGeometry = new THREE.PlaneGeometry(0.012, HOUSE_OF_CARDS.cardHeight * 0.68);
+  const innerRuleGeometry = new THREE.PlaneGeometry(HOUSE_OF_CARDS.cardWidth * 0.55, 0.008);
+  const innerRuleSideGeometry = new THREE.PlaneGeometry(0.008, HOUSE_OF_CARDS.cardHeight * 0.5);
+  const cornerIndexGeometry = new THREE.PlaneGeometry(0.058, 0.014);
+  const cornerIndexStemGeometry = new THREE.PlaneGeometry(0.014, 0.052);
+  const grainGeometry = new THREE.PlaneGeometry(HOUSE_OF_CARDS.cardWidth * 0.42, 0.004);
+  const diamondShape = new THREE.Shape();
+  diamondShape.moveTo(0, 0.038);
+  diamondShape.lineTo(0.028, 0);
+  diamondShape.lineTo(0, -0.038);
+  diamondShape.lineTo(-0.028, 0);
+  diamondShape.lineTo(0, 0.038);
+  const pipGeometry = new THREE.ShapeGeometry(diamondShape);
+  pipGeometry.name = "card-face-suit-diamond-geometry";
+  const centerDiamondShape = new THREE.Shape();
+  centerDiamondShape.moveTo(0, 0.068);
+  centerDiamondShape.lineTo(0.052, 0);
+  centerDiamondShape.lineTo(0, -0.068);
+  centerDiamondShape.lineTo(-0.052, 0);
+  centerDiamondShape.lineTo(0, 0.068);
+  const centerSuitGeometry = new THREE.ShapeGeometry(centerDiamondShape);
+
+  const addFacePart = (geometry, material, x, y, z, name) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = name;
+    mesh.position.set(x, y, z);
+    mesh.renderOrder = 10;
+    group.add(mesh);
+    return mesh;
+  };
+
+  for (const z of [faceZ, -faceZ]) {
+    const backSide = z < 0;
+    const sideRotation = backSide ? Math.PI : 0;
+    const grainOffset = body.kind === "bridge" ? 0.012 : 0;
+    const parts = [
+      addFacePart(topBottomGeometry, borderMaterial, 0, borderInsetY, z, "card-face-top-border"),
+      addFacePart(topBottomGeometry, borderMaterial, 0, -borderInsetY, z, "card-face-bottom-border"),
+      addFacePart(sideGeometry, borderMaterial, -borderInsetX, 0, z, "card-face-left-border"),
+      addFacePart(sideGeometry, borderMaterial, borderInsetX, 0, z, "card-face-right-border"),
+      addFacePart(innerRuleGeometry, ruleMaterial, 0, HOUSE_OF_CARDS.cardHeight * 0.31, z, "card-face-inner-rule-top"),
+      addFacePart(innerRuleGeometry, ruleMaterial, 0, -HOUSE_OF_CARDS.cardHeight * 0.31, z, "card-face-inner-rule-bottom"),
+      addFacePart(innerRuleSideGeometry, ruleMaterial, -HOUSE_OF_CARDS.cardWidth * 0.31, 0, z, "card-face-inner-rule-left"),
+      addFacePart(innerRuleSideGeometry, ruleMaterial, HOUSE_OF_CARDS.cardWidth * 0.31, 0, z, "card-face-inner-rule-right"),
+      addFacePart(cornerIndexGeometry, pipMaterial, -HOUSE_OF_CARDS.cardWidth * 0.31, HOUSE_OF_CARDS.cardHeight * 0.35, z, "card-face-corner-index-top"),
+      addFacePart(cornerIndexStemGeometry, pipMaterial, -HOUSE_OF_CARDS.cardWidth * 0.35, HOUSE_OF_CARDS.cardHeight * 0.315, z, "card-face-corner-index-stem-top"),
+      addFacePart(cornerIndexGeometry, pipMaterial, HOUSE_OF_CARDS.cardWidth * 0.31, -HOUSE_OF_CARDS.cardHeight * 0.35, z, "card-face-corner-index-bottom"),
+      addFacePart(cornerIndexStemGeometry, pipMaterial, HOUSE_OF_CARDS.cardWidth * 0.35, -HOUSE_OF_CARDS.cardHeight * 0.315, z, "card-face-corner-index-stem-bottom"),
+      addFacePart(pipGeometry, pipMaterial, -HOUSE_OF_CARDS.cardWidth * 0.18, HOUSE_OF_CARDS.cardHeight * 0.18, z, "card-face-suit-diamond-upper"),
+      addFacePart(pipGeometry, pipMaterial, HOUSE_OF_CARDS.cardWidth * 0.18, -HOUSE_OF_CARDS.cardHeight * 0.18, z, "card-face-suit-diamond-lower"),
+      addFacePart(centerSuitGeometry, pipMaterial, 0, 0, z, "card-face-center-suit"),
+      addFacePart(grainGeometry, grainMaterial, -HOUSE_OF_CARDS.cardWidth * 0.03, HOUSE_OF_CARDS.cardHeight * 0.06 + grainOffset, z, "card-face-paper-grain-a"),
+      addFacePart(grainGeometry, grainMaterial, HOUSE_OF_CARDS.cardWidth * 0.04, -HOUSE_OF_CARDS.cardHeight * 0.08 - grainOffset, z, "card-face-paper-grain-b")
+    ];
+    parts.forEach((part) => {
+      part.rotation.y = sideRotation;
+    });
+    parts
+      .filter((part) => part.name.includes("corner-index-bottom"))
+      .forEach((part) => {
+        part.rotation.z = Math.PI;
+      });
+    parts
+      .filter((part) => part.name.includes("paper-grain"))
+      .forEach((part, index) => {
+        part.rotation.z = (index % 2 === 0 ? 0.018 : -0.026) + (backSide ? Math.PI : 0);
+      });
+  }
+
+  return group;
+}
+
+function createSunnyPicnicSky() {
+  // Adapted from three.js examples/webgpu_sky.html controls while keeping the portfolio's WebGL renderer.
+  const sky = new Sky();
+  sky.name = "house-of-cards-sunny-sky";
+  sky.scale.setScalar(100);
+  sky.renderOrder = -30;
+  sky.material.depthTest = true;
+  sky.material.depthWrite = false;
+
+  const uniforms = sky.material.uniforms;
+  uniforms["turbidity"].value = HOUSE_OF_CARDS.skyTurbidity;
+  uniforms["rayleigh"].value = HOUSE_OF_CARDS.skyRayleigh;
+  uniforms["mieCoefficient"].value = HOUSE_OF_CARDS.skyMieCoefficient;
+  uniforms["mieDirectionalG"].value = HOUSE_OF_CARDS.skyMieDirectionalG;
+
+  const sun = new THREE.Vector3();
+  const phi = THREE.MathUtils.degToRad(90 - HOUSE_OF_CARDS.sunElevation);
+  const theta = THREE.MathUtils.degToRad(HOUSE_OF_CARDS.sunAzimuth);
+  sun.setFromSphericalCoords(1, phi, theta);
+  uniforms["sunPosition"].value.copy(sun);
+
+  return { sky, sun };
+}
+
+function createCloudTexture({ coverage, density }) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+  const softness = 0.24 + density * 0.24;
+  const cloudAlpha = 0.12 + density * 0.22;
+  const cloudCount = Math.round(18 + coverage * 34);
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  const horizonGradient = context.createLinearGradient(0, canvas.height * 0.1, 0, canvas.height);
+  horizonGradient.addColorStop(0, "rgba(255,255,255,0)");
+  horizonGradient.addColorStop(0.58, `rgba(255,255,255,${cloudAlpha * 0.18})`);
+  horizonGradient.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = horizonGradient;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let i = 0; i < cloudCount; i += 1) {
+    const u = ((i * 0.61803398875) % 1);
+    const wave = Math.sin(i * 1.73) * 0.5 + 0.5;
+    const x = u * canvas.width;
+    const y = canvas.height * (0.18 + wave * 0.44);
+    const radiusX = canvas.width * (0.055 + ((i % 5) * 0.012) + coverage * 0.02);
+    const radiusY = canvas.height * (0.026 + ((i % 4) * 0.008) + density * 0.014);
+    const gradient = context.createRadialGradient(x, y, radiusY * 0.15, x, y, radiusX);
+    gradient.addColorStop(0, `rgba(255,255,255,${cloudAlpha})`);
+    gradient.addColorStop(softness, `rgba(250,253,255,${cloudAlpha * 0.62})`);
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    context.fillStyle = gradient;
+    context.save();
+    context.translate(x, y);
+    context.scale(1, radiusY / radiusX);
+    context.beginPath();
+    context.arc(0, 0, radiusX, 0, TAU);
+    context.fill();
+    context.restore();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.name = "house-of-cards-webgpu-cloud-texture";
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.repeat.set(2, 1);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createWebGpuInspiredCloudLayer(layout) {
+  const texture = createCloudTexture({
+    coverage: HOUSE_OF_CARDS.cloudCoverage,
+    density: HOUSE_OF_CARDS.cloudDensity
+  });
+  const material = applyPageFade(
+    new THREE.MeshBasicMaterial({
+      map: texture,
+      color: "#ffffff",
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      side: THREE.BackSide
+    }),
+    0.52
+  );
+  const cloudLayer = new THREE.Mesh(new THREE.SphereGeometry(92, 48, 24), material);
+  cloudLayer.name = "house-of-cards-webgpu-cloud-layer";
+  cloudLayer.position.y = layout.height * (0.26 + HOUSE_OF_CARDS.cloudElevation * 0.18);
+  cloudLayer.renderOrder = -29;
+  return cloudLayer;
+}
+
+function createCardsSunDisc(sun, layout) {
+  const material = applyPageFade(
+    new THREE.SpriteMaterial({
+      color: "#fff6d3",
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending
+    }),
+    HOUSE_OF_CARDS.showSunDisc ? 0.42 : 0
+  );
+  const disc = new THREE.Sprite(material);
+  disc.name = "house-of-cards-sun-disc";
+  disc.position.copy(sun).multiplyScalar(42);
+  disc.position.y += layout.height * 0.34;
+  disc.scale.setScalar(3.6);
+  disc.renderOrder = -28;
+  return disc;
+}
+
+function createWoodGrainLines(tableWidth, slatDepth, slatIndex) {
+  const group = new THREE.Group();
+  group.name = `picnic-table-wood-grain-${slatIndex + 1}`;
+  const material = applyPageFade(
+    new THREE.MeshBasicMaterial({
+      color: "#5f351f",
+      depthWrite: false
+    }),
+    0.22
+  );
+  const lineCount = 3;
+
+  for (let i = 0; i < lineCount; i += 1) {
+    const width = tableWidth * (0.52 + ((slatIndex + i) % 3) * 0.12);
+    const geometry = new THREE.BoxGeometry(width, 0.006, 0.012);
+    const line = new THREE.Mesh(geometry, material);
+    line.name = `picnic-table-grain-line-${slatIndex + 1}-${i + 1}`;
+    line.position.set(
+      tableWidth * (((i + 1) / (lineCount + 1)) - 0.5) * 0.14,
+      HOUSE_OF_CARDS.picnicTableTopThickness * 0.5 + 0.004,
+      -slatDepth * 0.3 + (slatDepth * 0.3 * i)
+    );
+    line.renderOrder = 6;
+    group.add(line);
+  }
+
+  return group;
+}
+
+function createPicnicTable(layout) {
+  const group = new THREE.Group();
+  group.name = "house-of-cards-picnic-table";
+
+  const tableWidth = layout.width + 1.45;
+  const tableDepth = HOUSE_OF_CARDS.picnicTableDepth;
+  const slatCount = HOUSE_OF_CARDS.picnicTableSlatCount;
+  const slatStep = tableDepth / slatCount;
+  const slatDepth = slatStep * 0.78;
+  const slatGeometry = new THREE.BoxGeometry(tableWidth, HOUSE_OF_CARDS.picnicTableTopThickness, slatDepth);
+  const woodColors = ["#b9783e", "#cc8f4a", "#a96534", "#d39a57"];
+
+  for (let i = 0; i < slatCount; i += 1) {
+    const material = applyPageFade(
+      new THREE.MeshStandardMaterial({
+        color: woodColors[i % woodColors.length],
+        roughness: 0.74,
+        metalness: 0.02
+      }),
+      0.96
+    );
+    const slat = new THREE.Mesh(slatGeometry, material);
+    slat.name = `picnic-table-slat-${i + 1}`;
+    slat.position.set(0, HOUSE_OF_CARDS.tableY - 0.105, -tableDepth * 0.5 + slatStep * (i + 0.5));
+    slat.castShadow = true;
+    slat.receiveShadow = true;
+    slat.renderOrder = 5;
+    slat.add(createWoodGrainLines(tableWidth, slatDepth, i));
+    group.add(slat);
+  }
+
+  const supportMaterial = applyPageFade(
+    new THREE.MeshStandardMaterial({
+      color: "#80502d",
+      roughness: 0.82,
+      metalness: 0.01
+    }),
+    0.92
+  );
+  const beamGeometry = new THREE.BoxGeometry(tableWidth * 0.86, 0.08, 0.16);
+  const frontBeam = new THREE.Mesh(beamGeometry, supportMaterial);
+  frontBeam.name = "picnic-table-front-support";
+  frontBeam.position.set(0, HOUSE_OF_CARDS.tableY - 0.29, tableDepth * 0.41);
+  frontBeam.castShadow = true;
+  frontBeam.receiveShadow = true;
+  group.add(frontBeam);
+
+  const backBeam = frontBeam.clone();
+  backBeam.name = "picnic-table-back-support";
+  backBeam.position.z = -tableDepth * 0.41;
+  group.add(backBeam);
+
+  const legGeometry = new THREE.BoxGeometry(0.16, 0.72, 0.14);
+  const legPositions = [
+    [-tableWidth * 0.4, HOUSE_OF_CARDS.tableY - 0.48, tableDepth * 0.34],
+    [tableWidth * 0.4, HOUSE_OF_CARDS.tableY - 0.48, tableDepth * 0.34],
+    [-tableWidth * 0.4, HOUSE_OF_CARDS.tableY - 0.48, -tableDepth * 0.34],
+    [tableWidth * 0.4, HOUSE_OF_CARDS.tableY - 0.48, -tableDepth * 0.34]
+  ];
+  legPositions.forEach((position, index) => {
+    const leg = new THREE.Mesh(legGeometry, supportMaterial);
+    leg.name = `picnic-table-leg-${index + 1}`;
+    leg.position.set(position[0], position[1], position[2]);
+    leg.rotation.z = index % 2 === 0 ? 0.11 : -0.11;
+    leg.castShadow = true;
+    leg.receiveShadow = true;
+    group.add(leg);
+  });
+
+  return group;
+}
+
+function createSunnyPicnicBackdrop(layout) {
+  const group = new THREE.Group();
+  group.name = "house-of-cards-sunny-picnic-backdrop";
+
+  const skyPanelMaterial = applyPageFade(
+    new THREE.MeshBasicMaterial({
+      color: "#86c9f2",
+      depthWrite: false
+    }),
+    0.06
+  );
+  const skyPanel = new THREE.Mesh(
+    new THREE.PlaneGeometry(layout.width + 20, layout.height + 8),
+    skyPanelMaterial
+  );
+  skyPanel.name = "picnic-sky-soft-panel";
+  skyPanel.position.set(0, layout.height * 0.55, -1.6);
+  skyPanel.renderOrder = -20;
+  group.add(skyPanel);
+
+  const grassMaterial = applyPageFade(
+    new THREE.MeshBasicMaterial({
+      color: "#5caf57",
+      depthWrite: false
+    }),
+    0.88
+  );
+  const grass = new THREE.Mesh(
+    new THREE.PlaneGeometry(80, 80),
+    grassMaterial
+  );
+  grass.name = "picnic-lawn-grass";
+  grass.rotation.x = -Math.PI * 0.5;
+  grass.position.set(0, HOUSE_OF_CARDS.tableY - 0.58, -1.4);
+  grass.receiveShadow = true;
+  grass.renderOrder = -10;
+  group.add(grass);
+
+  const shadeMaterial = applyPageFade(
+    new THREE.MeshBasicMaterial({
+      color: "#2b5f2e",
+      transparent: true,
+      depthWrite: false
+    }),
+    0.12
+  );
+  const shade = new THREE.Mesh(new THREE.PlaneGeometry(layout.width + 4.4, 1.2), shadeMaterial);
+  shade.name = "picnic-table-soft-shade";
+  shade.rotation.x = -Math.PI * 0.5;
+  shade.position.set(0.25, HOUSE_OF_CARDS.tableY - 0.55, 0.06);
+  shade.renderOrder = -8;
+  group.add(shade);
+
+  return group;
+}
+
+function createHouseOfCardsPage({ reducedMotion = false } = {}) {
+  const page = new THREE.Group();
+  page.name = "house-of-cards-page";
+  page.position.y = HOUSE_OF_CARDS.sceneY;
+  page.rotation.y = HOUSE_OF_CARDS.pageYaw;
+  page.scale.setScalar(HOUSE_OF_CARDS.pageScale);
+  page.visible = false;
+
+  const layout = buildHouseOfCardsLayout({ bottomTriangles: HOUSE_OF_CARDS.bottomTriangles });
+  const bodies = createHouseCardPhysicsBodies(layout.cards);
+  const pickMeshes = [];
+
+  bodies.forEach((body) => {
+    const cardGeometry = createFlexiblePlayingCardGeometry({
+      width: HOUSE_OF_CARDS.cardWidth,
+      height: HOUSE_OF_CARDS.cardHeight,
+      thickness: HOUSE_OF_CARDS.cardVisualThickness,
+      bend: body.paperBend,
+      twist: body.paperTwist
+    });
+    const mesh = new THREE.Mesh(cardGeometry, createHouseCardMaterial(body.rowIndex, body.kind));
+    mesh.name = `house-card-${body.id}`;
+    mesh.position.copy(body.position);
+    mesh.rotation.copy(body.rotation);
+    mesh.userData.houseCardBody = body;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.renderOrder = 8;
+    mesh.add(createCardFaceDetails(body));
+    body.mesh = mesh;
+    page.add(mesh);
+    pickMeshes.push(mesh);
+  });
+
+  const { sky, sun } = createSunnyPicnicSky();
+  page.add(sky);
+  page.add(createWebGpuInspiredCloudLayer(layout));
+  page.add(createCardsSunDisc(sun, layout));
+  page.add(createSunnyPicnicBackdrop(layout));
+  page.add(createPicnicTable(layout));
+
+  const knockPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(layout.width + 1.7, layout.height + 1.2),
+    new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: false
+    })
+  );
+  knockPlane.name = "house-of-cards-knock-plane";
+  knockPlane.position.set(0, layout.height * 0.48, 0.12);
+  knockPlane.userData.isHouseOfCardsKnockPlane = true;
+  knockPlane.renderOrder = 20;
+  page.add(knockPlane);
+  pickMeshes.push(knockPlane);
+
+  const hemiLight = new THREE.HemisphereLight(0xb9e5ff, 0x77a85f, reducedMotion ? 1.8 : 2.25);
+  hemiLight.name = "house-of-cards-hemisphere-daylight";
+  hemiLight.position.set(0, 7, 0);
+  page.add(hemiLight);
+
+  const sunLight = new THREE.DirectionalLight(0xfff1bf, reducedMotion ? 2.2 : 2.75);
+  sunLight.name = "house-of-cards-sun";
+  sunLight.position.copy(sun).multiplyScalar(7.5);
+  sunLight.position.y += layout.height + 1.8;
+  sunLight.target.position.set(0, layout.height * 0.32, 0);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.camera.near = 0.2;
+  sunLight.shadow.camera.far = 18;
+  sunLight.shadow.camera.left = -6;
+  sunLight.shadow.camera.right = 6;
+  sunLight.shadow.camera.top = 6;
+  sunLight.shadow.camera.bottom = -4;
+  sunLight.shadow.bias = -0.00018;
+  page.add(sunLight);
+  page.add(sunLight.target);
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.12);
+  ambientLight.name = "house-of-cards-soft-day-ambient";
+  page.add(ambientLight);
+
+  page.userData.layout = layout;
+  page.userData.bodies = bodies;
+  page.userData.pickMeshes = pickMeshes;
+  page.userData.knockPlane = knockPlane;
+  page.userData.progress = 0;
+  page.userData.lastDragAt = -10;
+  page.userData.reset = () => {
+    bodies.forEach(resetHouseCardBody);
+  };
+
+  return page;
+}
+
 export function createSingularityScene({
   canvas,
   profile = {
@@ -1070,6 +2832,8 @@ export function createSingularityScene({
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.96;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(COLORS.void, 0.024);
@@ -1077,6 +2841,28 @@ export function createSingularityScene({
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 140);
   camera.position.set(0, 1.1, reducedMotion ? 12 : 18);
   scene.add(camera);
+  const baseCameraQuaternion = camera.quaternion.clone();
+  const cardsCameraTarget = new THREE.Vector3();
+  const cardsCameraRig = new THREE.Group();
+  cardsCameraRig.name = "house-of-cards-camera-rig";
+  scene.add(cardsCameraRig);
+  const cardsStackTargetLocal = new THREE.Vector3();
+  const cardsCameraForwardCorrection = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    Math.PI
+  );
+  const cardsCameraOrbitRadius = Math.hypot(
+    HOUSE_OF_CARDS.cameraX,
+    HOUSE_OF_CARDS.cameraZ - HOUSE_OF_CARDS.cameraLookAtZ
+  );
+  const cardsCameraOrbitStart = Math.atan2(
+    HOUSE_OF_CARDS.cameraX,
+    HOUSE_OF_CARDS.cameraZ - HOUSE_OF_CARDS.cameraLookAtZ
+  );
+  const cardsCameraVerticalOffset = HOUSE_OF_CARDS.cameraYOffset - HOUSE_OF_CARDS.cameraLookAtYOffset;
+  const cardsCameraOrbitSpeed = reducedMotion ? 0.45 : 0.9;
+  const cardsCameraInput = { left: false, right: false };
+  let cardsCameraManualOrbit = 0;
 
   const heroParticleText = createHeroParticleText(profile, { reducedMotion });
   camera.add(heroParticleText);
@@ -1121,14 +2907,29 @@ export function createSingularityScene({
   finalComposer.addPass(cinematicPass);
   finalComposer.addPass(outputPass);
 
+  function clearBloomComposerTargets() {
+    const previousTarget = renderer.getRenderTarget();
+    renderer.setRenderTarget(bloomComposer.renderTarget1);
+    renderer.clear(true, true, true);
+    renderer.setRenderTarget(bloomComposer.renderTarget2);
+    renderer.clear(true, true, true);
+    renderer.setRenderTarget(previousTarget);
+  }
+
   const timer = new THREE.Timer();
   timer.connect(document);
   const pointer = new THREE.Vector2();
   const raycaster = new THREE.Raycaster();
+  const houseCardDragPlane = new THREE.Plane();
+  const houseCardDragPlaneNormal = new THREE.Vector3();
+  const houseCardDragWorldPoint = new THREE.Vector3();
+  const houseCardDragLocalPoint = new THREE.Vector3();
   const nodeMeshes = new Map();
   const nodeButtons = new Map();
   const pickMeshes = [];
   let hoveredId = null;
+  let activeHouseCardDrag = null;
+  let lastHouseCardDragEventAt = 0;
   let activeSectionId = null;
   let running = false;
   let rafId = 0;
@@ -1199,13 +3000,16 @@ export function createSingularityScene({
   accretionDust.layers.enable(BLOOM_LAYER);
   scene.add(accretionDust);
 
+  const orbitGuideMeshes = [];
   NODE_LAYOUT.forEach((layout) => {
     const orbit = createOrbitLine(layout.radius, layout.color, layout.y * 0.18);
     scene.add(orbit);
+    orbitGuideMeshes.push(orbit);
 
     const trail = createTrailArc(layout.radius, layout.color, layout.phase - 0.4);
     trail.position.y = layout.y * 0.18;
     scene.add(trail);
+    orbitGuideMeshes.push(trail);
 
     const { group, core } = createNodeGroup(layout);
     nodeMeshes.set(layout.id, group);
@@ -1218,6 +3022,36 @@ export function createSingularityScene({
 
   const contactParticles = createContactParticles(getBudget("contact", reducedMotion));
   scene.add(contactParticles);
+
+  const singularityPageObjects = [
+    heroParticleText,
+    starField,
+    warmLight,
+    coolLight,
+    singularity,
+    accretionDust,
+    burstParticles,
+    contactParticles,
+    ...orbitGuideMeshes,
+    ...nodeMeshes.values()
+  ];
+
+  const houseOfCardsPage = createHouseOfCardsPage({ reducedMotion });
+  houseOfCardsPage.rotation.y = HOUSE_OF_CARDS.pageYaw;
+  scene.add(houseOfCardsPage);
+  const houseCardPickMeshes = houseOfCardsPage.userData.pickMeshes;
+  cardsStackTargetLocal.set(
+    0,
+    HOUSE_OF_CARDS.tableY + houseOfCardsPage.userData.layout.height * 0.52,
+    0.02
+  );
+  let hoveredHouseCardHit = null;
+
+  function syncCardsCameraRig() {
+    cardsCameraRig.position.copy(camera.position);
+    cardsCameraRig.lookAt(cardsCameraTarget);
+    cardsCameraRig.quaternion.multiply(cardsCameraForwardCorrection);
+  }
 
   function currentComposerScale() {
     if (reducedMotion) return POST_PROCESSING.composerScale.reducedMotion;
@@ -1317,6 +3151,7 @@ export function createSingularityScene({
     cinematicPass.uniforms.uResolution.value.set(width * composerPixelRatio, height * composerPixelRatio);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    syncCardsCameraRig();
     updateHeroParticleTextLayout(width, height);
     updateHorizonMaskUniforms(width, height);
     heroParticleText.material.uniforms.uPixelRatio.value = pixelRatio;
@@ -1434,11 +3269,12 @@ export function createSingularityScene({
       const y = clamp(anchorY, 84, height - 72);
       const depthOpacity = projected.z > 1 ? 0.18 : 0.58 + Math.max(0, group.position.z / 13);
       const horizonVisibility = group.userData.horizonVisibility ?? 1;
-      const connectorVisibility = Math.pow(horizonVisibility, 1.8);
+      const cardsPageFade = 1 - smoothstep(0.32, 0.82, cinematicPass.uniforms.uScrollTransition.value);
+      const connectorVisibility = Math.pow(horizonVisibility, 1.8) * cardsPageFade;
       const scrollLabelBoost = 1 + cinematicPass.uniforms.uScrollTransition.value * 0.16;
       const labelVisibility = activeSectionId && activeSectionId !== id
         ? 0.16
-        : clamp(depthOpacity * (0.58 + horizonVisibility * 0.42) * scrollLabelBoost, 0.28, 0.96);
+        : clamp(depthOpacity * (0.58 + horizonVisibility * 0.42) * scrollLabelBoost * cardsPageFade, 0, 0.96);
 
       button.style.setProperty("--node-x", `${x}px`);
       button.style.setProperty("--node-y", `${y}px`);
@@ -1586,27 +3422,196 @@ export function createSingularityScene({
     contactParticles.rotation.y = elapsed * 0.25;
   }
 
-  function updateScrollCinematicTargets() {
+  function updatePageVisibility(cardsPageProgress) {
+    const singularityPageRunning = cardsPageProgress < 0.62;
+    singularityPageObjects.forEach((object) => {
+      object.visible = singularityPageRunning;
+    });
+    houseOfCardsPage.visible = cardsPageProgress > 0.02;
+    root.classList?.toggle("is-cards-page", !singularityPageRunning);
+    if (cardsPageProgress <= 0.015 || cardsPageProgress >= 0.62) {
+      root.classList?.remove("is-scroll-transitioning");
+    }
+    return singularityPageRunning;
+  }
+
+  function updateScrollCinematicTargets(delta = 0) {
     const progress = clamp(cinematicPass.uniforms.uScrollTransition.value, 0, 1);
     const scrollOrbitEase = smoothstep(0, 1, progress);
     const scrollParallax = reducedMotion ? 0 : scrollOrbitEase;
     const mobile = isMobileViewport();
+    const cardsPageProgress = scrollOrbitEase;
+    const cardsPageOpacity = smoothstep(0.04, 0.52, cardsPageProgress);
+    houseOfCardsPage.updateWorldMatrix(true, false);
+    cardsCameraTarget.copy(cardsStackTargetLocal);
+    houseOfCardsPage.localToWorld(cardsCameraTarget);
+    const cardsOrbitBlend = smoothstep(0.56, 0.92, cardsPageProgress);
+    const cardsCameraInputAxis = Number(cardsCameraInput.right) - Number(cardsCameraInput.left);
+    if (cardsOrbitBlend > 0.01 && cardsCameraInputAxis !== 0) {
+      cardsCameraManualOrbit += cardsCameraInputAxis * cardsCameraOrbitSpeed * delta;
+    }
+    const cardsCameraOrbitAngle = cardsCameraOrbitStart + cardsCameraManualOrbit * cardsOrbitBlend;
+    const cardsOrbitX = cardsCameraTarget.x + Math.sin(cardsCameraOrbitAngle) * cardsCameraOrbitRadius;
+    const cardsOrbitZ = cardsCameraTarget.z + Math.cos(cardsCameraOrbitAngle) * cardsCameraOrbitRadius;
+    const cardsOrbitY = cardsCameraTarget.y
+      + cardsCameraVerticalOffset
+      + Math.sin(cardsCameraOrbitAngle * 0.7) * (mobile ? 0.08 : 0.18) * cardsOrbitBlend;
+    const cardsCameraX = lerp(cardsCameraTarget.x + HOUSE_OF_CARDS.cameraX, cardsOrbitX, cardsOrbitBlend);
+    const cardsCameraY = lerp(cardsCameraTarget.y + cardsCameraVerticalOffset, cardsOrbitY, cardsOrbitBlend);
+    const cardsCameraZ = lerp(cardsCameraTarget.z + HOUSE_OF_CARDS.cameraZ, cardsOrbitZ, cardsOrbitBlend);
+    const shouldApplyScrollCamera = !activeSectionId
+      && (
+        scrollParallax > 0.001 ||
+        scrollTransitionTarget > 0 ||
+        Math.abs(camera.position.x) > 0.001 ||
+        Math.abs(camera.position.y - 1.1) > 0.001 ||
+        Math.abs(camera.position.z - 11.5) > 0.001
+      );
 
-    if (!activeSectionId && scrollParallax > 0.001) {
-      camera.position.x = 0;
-      camera.position.y = 1.1 - scrollParallax * (mobile ? 0.18 : 0.32);
-      camera.position.z = 11.5 - scrollParallax * (mobile ? 1.1 : 2.25);
+    if (shouldApplyScrollCamera) {
+      camera.position.x = lerp(0, cardsCameraX, cardsPageProgress);
+      camera.position.y = lerp(1.1, cardsCameraY, cardsPageProgress);
+      camera.position.z = lerp(11.5, cardsCameraZ, cardsPageProgress);
     }
 
-    singularity.position.y = scrollParallax * (mobile ? 0.1 : 0.18);
-    singularity.scale.setScalar(1 + scrollParallax * (mobile ? 0.035 : 0.06));
-    accretionDust.scale.setScalar(1 + scrollParallax * 0.035);
+    if (!activeSectionId && (cardsPageProgress > 0.001 || scrollTransitionTarget > 0 || Math.abs(camera.position.x) > 0.001)) {
+      syncCardsCameraRig();
+      camera.quaternion.slerpQuaternions(baseCameraQuaternion, cardsCameraRig.quaternion, cardsPageProgress);
+    }
+    syncCardsCameraRig();
+
+    singularity.position.y = -cardsPageProgress * (mobile ? 0.36 : 0.7);
+    singularity.scale.setScalar(1 + scrollParallax * (mobile ? 0.008 : 0.014));
+    accretionDust.position.y = singularity.position.y * 0.72;
+    accretionDust.scale.setScalar(1 + scrollParallax * 0.012);
     accretionDust.material.uniforms.uWakeStrength.value = (reducedMotion ? 0.18 : 0.58) + scrollParallax * 0.18;
+    renderer.toneMappingExposure = lerp(0.96, 0.76, cardsPageProgress);
+    updatePageVisibility(cardsPageProgress);
+    houseOfCardsPage.userData.progress = cardsPageProgress;
+    houseOfCardsPage.traverse((object) => {
+      const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
+      materials.forEach((material) => {
+        if (typeof material.userData.baseOpacity === "number") {
+          material.opacity = material.userData.baseOpacity * cardsPageOpacity;
+          material.needsUpdate = true;
+        }
+      });
+    });
 
     if (!activeSectionId) {
       const bloomProfile = currentBloomProfile();
       bloomPass.strength = bloomProfile.strength + scrollParallax * (mobile ? 0.025 : 0.055);
     }
+  }
+
+  function isEditableKeyboardTarget(target) {
+    return target instanceof HTMLElement && Boolean(
+      target.closest("input, textarea, select, [contenteditable=\"true\"]")
+    );
+  }
+
+  function resetCardsCameraInput() {
+    cardsCameraInput.left = false;
+    cardsCameraInput.right = false;
+  }
+
+  function handleCardsCameraKeyDown(event) {
+    if (isEditableKeyboardTarget(event.target)) return;
+
+    const key = event.key.toLowerCase();
+    if (key !== "a" && key !== "d") return;
+
+    if (key === "a") {
+      cardsCameraInput.left = true;
+    } else {
+      cardsCameraInput.right = true;
+    }
+
+    if (cinematicPass.uniforms.uScrollTransition.value > 0.55) {
+      event.preventDefault();
+    }
+  }
+
+  function handleCardsCameraKeyUp(event) {
+    const key = event.key.toLowerCase();
+    if (key === "a") {
+      cardsCameraInput.left = false;
+    } else if (key === "d") {
+      cardsCameraInput.right = false;
+    }
+  }
+
+  function isHouseOfCardsPageInteractive() {
+    return !activeSectionId && cinematicPass.uniforms.uScrollTransition.value > 0.58;
+  }
+
+  function pickHouseOfCards() {
+    const hits = raycaster.intersectObjects(houseCardPickMeshes, false);
+    return hits.find((hit) => {
+      const body = hit.object.userData.houseCardBody;
+      return body && !body.removed && hit.object.visible !== false;
+    }) ?? null;
+  }
+
+  function startHouseCardDragFromPointer(event, hit = hoveredHouseCardHit) {
+    if (!hit || !isHouseOfCardsPageInteractive()) return false;
+
+    const targetBody = hit.object.userData.houseCardBody;
+    if (!targetBody || targetBody.removed) return false;
+
+    camera.getWorldDirection(houseCardDragPlaneNormal).normalize();
+    houseCardDragPlane.setFromNormalAndCoplanarPoint(houseCardDragPlaneNormal, hit.point);
+    houseCardDragLocalPoint.copy(hit.point);
+    houseOfCardsPage.worldToLocal(houseCardDragLocalPoint);
+
+    activeHouseCardDrag = beginHouseCardDrag(houseOfCardsPage.userData.bodies, targetBody, houseCardDragLocalPoint, {
+      maxForce: reducedMotion ? 34 : 42
+    });
+    if (!activeHouseCardDrag) return false;
+
+    event?.target?.setPointerCapture?.(event.pointerId);
+    houseOfCardsPage.userData.lastDragAt = lastElapsed;
+    lastHouseCardDragEventAt = event?.timeStamp ?? 0;
+    canvas.style.cursor = "grabbing";
+    return true;
+  }
+
+  function updateActiveHouseCardDrag(delta = 1 / 60) {
+    if (!activeHouseCardDrag?.active) return false;
+    if (!raycaster.ray.intersectPlane(houseCardDragPlane, houseCardDragWorldPoint)) return false;
+
+    houseCardDragLocalPoint.copy(houseCardDragWorldPoint);
+    houseOfCardsPage.worldToLocal(houseCardDragLocalPoint);
+    const layout = houseOfCardsPage.userData.layout;
+    houseCardDragLocalPoint.x = clamp(houseCardDragLocalPoint.x, -layout.width * 0.64, layout.width * 0.64);
+    houseCardDragLocalPoint.y = clamp(houseCardDragLocalPoint.y, HOUSE_OF_CARDS.tableY + 0.12, layout.height + 1.45);
+    houseCardDragLocalPoint.z = clamp(
+      houseCardDragLocalPoint.z,
+      -HOUSE_OF_CARDS.picnicTableDepth * 0.72,
+      HOUSE_OF_CARDS.picnicTableDepth * 0.72
+    );
+
+    return updateHouseCardDrag(activeHouseCardDrag, houseCardDragLocalPoint, delta);
+  }
+
+  function endActiveHouseCardDrag(event) {
+    if (!activeHouseCardDrag) return false;
+
+    event?.target?.releasePointerCapture?.(event.pointerId);
+    const ended = endHouseCardDrag(activeHouseCardDrag);
+    activeHouseCardDrag = null;
+    hoveredHouseCardHit = pickHouseOfCards();
+    canvas.style.cursor = hoveredHouseCardHit ? "grab" : "default";
+    return ended;
+  }
+
+  function updateHouseOfCardsPhysics(delta) {
+    if (houseOfCardsPage.userData.progress < 0.5) return;
+
+    stepHouseOfCardsPhysics(
+      houseOfCardsPage.userData.bodies,
+      reducedMotion ? Math.min(delta, 1 / 90) : delta
+    );
   }
 
   function setDeviceTilt({
@@ -1717,6 +3722,23 @@ export function createSingularityScene({
     });
   }
 
+  function updateSingularityPage(elapsed, delta) {
+    singularity.rotation.y = SINGULARITY_VIEW_TILT.y + Math.sin(elapsed * 0.2) * (reducedMotion ? 0.006 : 0.018);
+    starField.rotation.y = elapsed * (reducedMotion ? 0.0015 : 0.009);
+    starField.rotation.x = Math.sin(elapsed * 0.08) * 0.02;
+
+    updateDeviceTiltParallax();
+    updateHorizonMaskUniforms();
+    updateShaderUniforms(elapsed);
+    updateHeroParticleText(elapsed);
+    updateNodeMeshes(elapsed);
+    updateAccretionDust(elapsed);
+    updateBurstParticles(elapsed);
+    animateContactParticles(elapsed);
+    updateNodeButtons(elapsed);
+    return delta;
+  }
+
   function renderFrame(timestamp) {
     if (!running) return;
     rafId = window.requestAnimationFrame(renderFrame);
@@ -1727,22 +3749,20 @@ export function createSingularityScene({
     lastElapsed = elapsed;
 
     resizeIfCanvasBoundsChanged();
-    singularity.rotation.y = SINGULARITY_VIEW_TILT.y + Math.sin(elapsed * 0.2) * (reducedMotion ? 0.006 : 0.018);
-    starField.rotation.y = elapsed * (reducedMotion ? 0.0015 : 0.009);
-    starField.rotation.x = Math.sin(elapsed * 0.08) * 0.02;
-
-    updateScrollCinematicTargets();
-    updateDeviceTiltParallax();
-    updateHorizonMaskUniforms();
-    updateShaderUniforms(elapsed);
-    updateHeroParticleText(elapsed);
-    updateNodeMeshes(elapsed);
-    updateAccretionDust(elapsed);
-    updateBurstParticles(elapsed);
-    animateContactParticles(elapsed);
-    updateNodeButtons(elapsed);
-    camera.layers.set(BLOOM_LAYER);
-    bloomComposer.render(delta);
+    updateScrollCinematicTargets(delta);
+    const cardsPageProgress = clamp(cinematicPass.uniforms.uScrollTransition.value, 0, 1);
+    const singularityPageRunning = cardsPageProgress < 0.62;
+    cinematicPass.uniforms.uTime.value = elapsed;
+    if (singularityPageRunning) {
+      updateSingularityPage(elapsed, delta);
+    }
+    updateHouseOfCardsPhysics(delta);
+    if (singularityPageRunning) {
+      camera.layers.set(BLOOM_LAYER);
+      bloomComposer.render(delta);
+    } else {
+      clearBloomComposerTargets();
+    }
     camera.layers.set(DEFAULT_LAYER);
     finalComposer.render(delta);
   }
@@ -1836,12 +3856,36 @@ export function createSingularityScene({
     });
   }
 
-  function handlePointerMove(event) {
-    updateHeroParticleDiffusionFromPointer(event);
+  function updatePointerRayFromEvent(event) {
     const rect = canvas.getBoundingClientRect();
     pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
+  }
+
+  function handlePointerMove(event) {
+    updateHeroParticleDiffusionFromPointer(event);
+    updatePointerRayFromEvent(event);
+
+    if (activeHouseCardDrag?.active) {
+      const eventTime = event.timeStamp ?? lastHouseCardDragEventAt;
+      const dragDelta = lastHouseCardDragEventAt
+        ? clamp((eventTime - lastHouseCardDragEventAt) / 1000, 1 / 120, 1 / 20)
+        : 1 / 60;
+      lastHouseCardDragEventAt = eventTime;
+      updateActiveHouseCardDrag(dragDelta);
+      canvas.style.cursor = "grabbing";
+      return;
+    }
+
+    if (isHouseOfCardsPageInteractive()) {
+      hoveredHouseCardHit = pickHouseOfCards();
+      hoveredId = null;
+      canvas.style.cursor = hoveredHouseCardHit ? "grab" : "default";
+      return;
+    }
+
+    hoveredHouseCardHit = null;
     const hits = raycaster.intersectObjects(pickMeshes, false);
     const visibleHit = hits.find((hit) => (hit.object.parent?.userData?.horizonVisibility ?? 1) > 0.12);
     hoveredId = visibleHit?.object?.userData?.sectionId ?? null;
@@ -1863,7 +3907,44 @@ export function createSingularityScene({
     }
   }
 
-  function handleClick() {
+  function handlePointerDown(event) {
+    if (event.button !== undefined && event.button !== 0) return;
+    updatePointerRayFromEvent(event);
+
+    if (!isHouseOfCardsPageInteractive()) return;
+
+    hoveredHouseCardHit = pickHouseOfCards();
+    hoveredId = null;
+    if (startHouseCardDragFromPointer(event, hoveredHouseCardHit)) {
+      event.preventDefault();
+    }
+  }
+
+  function handlePointerUp(event) {
+    if (!activeHouseCardDrag) return;
+
+    updatePointerRayFromEvent(event);
+    const eventTime = event.timeStamp ?? lastHouseCardDragEventAt;
+    const dragDelta = lastHouseCardDragEventAt
+      ? clamp((eventTime - lastHouseCardDragEventAt) / 1000, 1 / 120, 1 / 20)
+      : 1 / 60;
+    lastHouseCardDragEventAt = 0;
+    updateActiveHouseCardDrag(dragDelta);
+    endActiveHouseCardDrag(event);
+    event.preventDefault();
+  }
+
+  function handleClick(event) {
+    if (event) {
+      updatePointerRayFromEvent(event);
+    }
+
+    if (isHouseOfCardsPageInteractive()) {
+      hoveredHouseCardHit = pickHouseOfCards();
+      hoveredId = null;
+      return;
+    }
+
     if (hoveredId) {
       onNodeSelect?.(hoveredId);
     }
@@ -1872,7 +3953,9 @@ export function createSingularityScene({
   function handlePointerLeave() {
     heroParticleText.userData.hoveringHero = false;
     heroParticleText.userData.pointerActive = false;
+    if (activeHouseCardDrag?.active) return;
     hoveredId = null;
+    hoveredHouseCardHit = null;
     canvas.style.cursor = "default";
   }
 
@@ -1894,9 +3977,15 @@ export function createSingularityScene({
       relativisticSingularity.material.uniforms.uOpacity.value = 0.78;
     }
 
+    canvas.addEventListener("pointerdown", handlePointerDown);
     canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerup", handlePointerUp);
+    canvas.addEventListener("pointercancel", handlePointerUp);
     canvas.addEventListener("pointerleave", handlePointerLeave);
     canvas.addEventListener("click", handleClick);
+    window.addEventListener("keydown", handleCardsCameraKeyDown);
+    window.addEventListener("keyup", handleCardsCameraKeyUp);
+    window.addEventListener("blur", resetCardsCameraInput);
     window.addEventListener("resize", resize);
     observeCanvasResize();
     resizePoller = window.setInterval(resizeIfCanvasBoundsChanged, 250);
@@ -1913,9 +4002,15 @@ export function createSingularityScene({
 
   function dispose() {
     stop();
+    canvas.removeEventListener("pointerdown", handlePointerDown);
     canvas.removeEventListener("pointermove", handlePointerMove);
+    canvas.removeEventListener("pointerup", handlePointerUp);
+    canvas.removeEventListener("pointercancel", handlePointerUp);
     canvas.removeEventListener("pointerleave", handlePointerLeave);
     canvas.removeEventListener("click", handleClick);
+    window.removeEventListener("keydown", handleCardsCameraKeyDown);
+    window.removeEventListener("keyup", handleCardsCameraKeyUp);
+    window.removeEventListener("blur", resetCardsCameraInput);
     window.removeEventListener("resize", resize);
     if (resizeObserver) {
       resizeObserver.disconnect();

@@ -28,6 +28,48 @@ export const PERFORMANCE_LIMITS = {
   mobileBreakpoint: 760
 };
 
+export const HOUSE_OF_CARDS = {
+  bottomTriangles: 6,
+  sceneY: -8.8,
+  cameraYOffset: 3.75,
+  cameraX: -1.35,
+  cameraZ: 10.4,
+  cameraLookAtYOffset: 2.05,
+  cameraLookAtZ: 0.06,
+  pageScale: 0.72,
+  pageYaw: 0.16,
+  tableY: -0.08,
+  cardWidth: 0.52,
+  cardHeight: 1.42,
+  cardThickness: 0.014,
+  cardVisualThickness: 0.024,
+  cardColliderThickness: 0.06,
+  cardCornerRadius: 0.026,
+  cardDepth: 0.78,
+  leanAngle: Math.PI * 0.115,
+  faceInwardAngle: Math.PI * 0.34,
+  triangleSpacing: 1.08,
+  gravity: -9.8,
+  damping: 0.985,
+  angularDamping: 0.976,
+  knockStrength: 5.8,
+  knockRadius: 2.65,
+  skyTurbidity: 10,
+  skyRayleigh: 3,
+  skyMieCoefficient: 0.005,
+  skyMieDirectionalG: 0.7,
+  sunElevation: 36,
+  sunAzimuth: 136,
+  cloudCoverage: 0.4,
+  cloudDensity: 0.4,
+  cloudElevation: 0.5,
+  showSunDisc: true,
+  picnicTableSlatCount: 6,
+  picnicTableDepth: 2.42,
+  picnicTableTopThickness: 0.08,
+  grassBackdropHeight: 2.6
+};
+
 export const POST_PROCESSING = {
   passes: ["EffectComposer", "RenderPass", "UnrealBloomPass", "ShaderPass", "SelectiveBloomComposite", "OutputPass"],
   composerScale: {
