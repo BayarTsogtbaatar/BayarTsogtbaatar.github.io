@@ -229,8 +229,13 @@ function canUseScrollTransition(event) {
   const target = event?.target instanceof Element ? event.target : null;
   if (target?.closest(".content-panel")) return false;
   if (app.classList.contains("webgl-fallback")) return false;
+  if (isCardsPageTouchEvent(event)) return false;
 
   return state.mode === "intro" || state.mode === "orbit";
+}
+
+function isCardsPageTouchEvent(event) {
+  return scrollTransitioned && event?.type?.startsWith("touch");
 }
 
 function setScrollTransitionState(nextTransitioned, { immediate = motionQuery.matches } = {}) {
@@ -243,6 +248,9 @@ function setScrollTransitionState(nextTransitioned, { immediate = motionQuery.ma
   app.classList.toggle("is-cards-page", scrollTransitioned);
   document.documentElement.classList.toggle("is-cards-page", scrollTransitioned);
   app.classList.add("is-scroll-transitioning");
+  if (scrollTransitioned) {
+    stopDeviceTilt();
+  }
   sceneController?.setScrollTransition(targetProgress, {
     immediate,
     direction: scrollTransitioned ? 1 : -1

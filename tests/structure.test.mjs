@@ -304,6 +304,24 @@ test("house-of-cards camera orbit is manually controlled with A and D instead of
   assert.equal(source.includes("lastElapsed * cardsCameraOrbitSpeed"), false);
 });
 
+test("house-of-cards mobile camera rotates from horizontal touch drag on empty space", () => {
+  const source = readFileSync("src/scene.js", "utf8");
+  for (const fragment of [
+    "const cardsCameraTouchOrbit = { active: false",
+    "const cardsCameraTouchOrbitSpeed",
+    "function startCardsCameraTouchOrbit",
+    "function updateCardsCameraTouchOrbit",
+    "function endCardsCameraTouchOrbit",
+    "event.pointerType !== \"touch\"",
+    "cardsCameraManualOrbit += pointerDeltaX * cardsCameraTouchOrbitSpeed",
+    "startCardsCameraTouchOrbit(event)",
+    "updateCardsCameraTouchOrbit(event)",
+    "endCardsCameraTouchOrbit(event)"
+  ]) {
+    assert.ok(source.includes(fragment), `Missing mobile cards touch camera fragment ${fragment}`);
+  }
+});
+
 test("house-of-cards physics uses Cannon rigid bodies instead of hand-rolled falling", () => {
   const source = readFileSync("src/scene.js", "utf8");
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
@@ -476,11 +494,15 @@ test("index includes a compact cards-page control hint", () => {
   const html = readFileSync("index.html", "utf8");
   for (const fragment of [
     "cards-control-hint",
+    "cards-keyboard-hint",
+    "cards-touch-hint",
     "House of cards controls",
     "<kbd>A</kbd>",
     "<kbd>D</kbd>",
     "Rotate camera",
+    "Swipe empty space",
     "Click + drag",
+    "Tap + drag",
     "Move cards"
   ]) {
     assert.ok(html.includes(fragment), `Missing cards controls hint fragment ${fragment}`);
@@ -1359,11 +1381,15 @@ test("main app maps wheel and touch gestures to reversible scene scroll transiti
   for (const fragment of [
     "let scrollTransitioned = false",
     "let scrollGestureAccumulator = 0",
+    "function isCardsPageTouchEvent(event)",
+    "scrollTransitioned && event?.type?.startsWith(\"touch\")",
     "function setScrollTransitionState(nextTransitioned",
     "app.classList.toggle(\"is-scroll-transitioned\", scrollTransitioned)",
     "app.classList.toggle(\"is-cards-page\", scrollTransitioned)",
     "document.documentElement.classList.toggle(\"is-cards-page\", scrollTransitioned)",
     "document.documentElement.classList.remove(\"is-scroll-transitioning\")",
+    "if (scrollTransitioned) {",
+    "stopDeviceTilt()",
     "sceneController?.setScrollTransition(targetProgress",
     "function handleScrollTransitionWheel(event)",
     "event.deltaY",
@@ -1390,6 +1416,9 @@ test("CSS has scroll-transition states without adding a full page overlay", () =
     ".cards-control-hint",
     ".app-shell.is-cards-page .cards-control-hint",
     ".cards-control-hint kbd",
+    ".cards-touch-hint",
+    ".cards-keyboard-hint",
+    ".app-shell.is-cards-page .tilt-toggle",
     "pointer-events: none;",
     ".app-shell.is-scroll-transitioning #singularity-canvas",
     "@media (prefers-reduced-motion: reduce)"

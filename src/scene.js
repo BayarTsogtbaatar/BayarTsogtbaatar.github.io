@@ -2861,7 +2861,9 @@ export function createSingularityScene({
   );
   const cardsCameraVerticalOffset = HOUSE_OF_CARDS.cameraYOffset - HOUSE_OF_CARDS.cameraLookAtYOffset;
   const cardsCameraOrbitSpeed = reducedMotion ? 0.45 : 0.9;
+  const cardsCameraTouchOrbitSpeed = reducedMotion ? 0.0032 : 0.0058;
   const cardsCameraInput = { left: false, right: false };
+  const cardsCameraTouchOrbit = { active: false, pointerId: null, lastX: 0 };
   let cardsCameraManualOrbit = 0;
 
   const heroParticleText = createHeroParticleText(profile, { reducedMotion });
@@ -3576,6 +3578,43 @@ export function createSingularityScene({
     return true;
   }
 
+  function startCardsCameraTouchOrbit(event) {
+    if (!isHouseOfCardsPageInteractive()) return false;
+    if (event.pointerType !== "touch") return false;
+
+    cardsCameraTouchOrbit.active = true;
+    cardsCameraTouchOrbit.pointerId = event.pointerId;
+    cardsCameraTouchOrbit.lastX = event.clientX;
+    event?.target?.setPointerCapture?.(event.pointerId);
+    canvas.style.cursor = "grabbing";
+    return true;
+  }
+
+  function updateCardsCameraTouchOrbit(event) {
+    if (!cardsCameraTouchOrbit.active) return false;
+    if (event.pointerId !== cardsCameraTouchOrbit.pointerId) return false;
+
+    const pointerDeltaX = event.clientX - cardsCameraTouchOrbit.lastX;
+    cardsCameraTouchOrbit.lastX = event.clientX;
+    if (Math.abs(pointerDeltaX) < 0.25) return true;
+
+    cardsCameraManualOrbit += pointerDeltaX * cardsCameraTouchOrbitSpeed;
+    canvas.style.cursor = "grabbing";
+    return true;
+  }
+
+  function endCardsCameraTouchOrbit(event) {
+    if (!cardsCameraTouchOrbit.active) return false;
+    if (event?.pointerId !== undefined && event.pointerId !== cardsCameraTouchOrbit.pointerId) return false;
+
+    event?.target?.releasePointerCapture?.(event.pointerId);
+    cardsCameraTouchOrbit.active = false;
+    cardsCameraTouchOrbit.pointerId = null;
+    cardsCameraTouchOrbit.lastX = 0;
+    canvas.style.cursor = hoveredHouseCardHit ? "grab" : "default";
+    return true;
+  }
+
   function updateActiveHouseCardDrag(delta = 1 / 60) {
     if (!activeHouseCardDrag?.active) return false;
     if (!raycaster.ray.intersectPlane(houseCardDragPlane, houseCardDragWorldPoint)) return false;
@@ -3878,6 +3917,11 @@ export function createSingularityScene({
       return;
     }
 
+    if (updateCardsCameraTouchOrbit(event)) {
+      event.preventDefault();
+      return;
+    }
+
     if (isHouseOfCardsPageInteractive()) {
       hoveredHouseCardHit = pickHouseOfCards();
       hoveredId = null;
@@ -3917,11 +3961,21 @@ export function createSingularityScene({
     hoveredId = null;
     if (startHouseCardDragFromPointer(event, hoveredHouseCardHit)) {
       event.preventDefault();
+      return;
+    }
+
+    if (!hoveredHouseCardHit && startCardsCameraTouchOrbit(event)) {
+      event.preventDefault();
     }
   }
 
   function handlePointerUp(event) {
-    if (!activeHouseCardDrag) return;
+    if (!activeHouseCardDrag) {
+      if (endCardsCameraTouchOrbit(event)) {
+        event.preventDefault();
+      }
+      return;
+    }
 
     updatePointerRayFromEvent(event);
     const eventTime = event.timeStamp ?? lastHouseCardDragEventAt;
@@ -3950,9 +4004,10 @@ export function createSingularityScene({
     }
   }
 
-  function handlePointerLeave() {
+  function handlePointerLeave(event) {
     heroParticleText.userData.hoveringHero = false;
     heroParticleText.userData.pointerActive = false;
+    if (endCardsCameraTouchOrbit(event)) return;
     if (activeHouseCardDrag?.active) return;
     hoveredId = null;
     hoveredHouseCardHit = null;

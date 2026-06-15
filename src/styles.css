@@ -536,6 +536,19 @@ html.is-cards-page .cards-control-hint {
   line-height: 1;
 }
 
+.cards-control-hint .cards-touch-hint {
+  display: none;
+}
+
+.cards-control-hint .cards-keyboard-hint {
+  display: inline-flex;
+}
+
+.app-shell.is-cards-page .tilt-toggle,
+html.is-cards-page .tilt-toggle {
+  display: none !important;
+}
+
 .cards-control-hint kbd {
   min-width: 1.35rem;
   padding: 0.18rem 0.32rem;
@@ -721,6 +734,19 @@ html.is-cards-page .orbit-node-button {
 
   .tilt-toggle {
     display: grid;
+  }
+
+  .cards-control-hint {
+    gap: 0.5rem;
+    padding: 0.42rem 0.55rem;
+  }
+
+  .cards-control-hint .cards-keyboard-hint {
+    display: none;
+  }
+
+  .cards-control-hint .cards-touch-hint {
+    display: inline-flex;
   }
 
   .orbit-node-button {
